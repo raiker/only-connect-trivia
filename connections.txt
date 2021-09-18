@@ -1,0 +1,36 @@
+connection: Winner of Golden Raspberry for Worst Picture
+    Jack and Jill
+    Cats
+    Fifty Shades of Grey
+    Catwoman
+connection: Elements named after them
+    Einstein
+    Rutherford
+    The sun
+    Germany
+connection: Neil Gaiman novels
+    Coraline
+    Stardust
+    Neverwhere
+    American Gods
+connection: Battles of the Western Front (WW1)
+    Marne
+    Somme
+    Verdun
+    Ypres
+connection: Potatoes
+    Kestrel
+    Yukon Gold
+    Kipfler
+    Dutch Cream
+connection: Toilet _____
+    Brush
+    Window
+    Seat
+    Paper
+connection: Anagrams of countries
+    Regalia
+    Panel
+    Also
+    Rain
+connection: Contain animals
