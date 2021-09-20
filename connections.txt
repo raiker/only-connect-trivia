@@ -1,4 +1,4 @@
-connection: Winner of Golden Raspberry for Worst Picture
+connection: Winners of Golden Raspberry for Worst Picture
     Jack and Jill
     Cats
     Fifty Shades of Grey
@@ -25,7 +25,7 @@ connection: Potatoes
     Dutch Cream
 connection: Toilet _____
     Brush
-    Window
+    Spray
     Seat
     Paper
 connection: Anagrams of countries
@@ -33,4 +33,3 @@ connection: Anagrams of countries
     Panel
     Also
     Rain
-connection: Contain animals

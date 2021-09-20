@@ -3,6 +3,7 @@ use sdl2::event::Event;
 use sdl2::gfx::primitives::DrawRenderer;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
+use sdl2::rect::Rect;
 use std::io::{prelude::*, BufReader};
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -13,10 +14,9 @@ pub fn main() {
     }
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
+    let ttf_context = sdl2::ttf::init().unwrap();
 
-    // let (_ddpi, _hdpi, _vdpi) = video_subsystem.display_dpi(0).unwrap();
-
-    let questions = match load_questions("./warmup.txt") {
+    let questions = match load_questions("./connections.txt") {
         Ok(qs) => qs,
         Err(es) => {
             eprintln!("Error(s) loading file");
@@ -34,12 +34,21 @@ pub fn main() {
     };
 
     let window = video_subsystem
-        .window("Only Connect Trivia", 800, 600)
+        .window("Only Connect Trivia", 1280, 720)
         .position_centered()
         .allow_highdpi()
-        //.fullscreen_desktop()
+        .fullscreen_desktop()
         .build()
         .unwrap();
+
+    let metrics = Metrics::from_window_dimensions(window.size());
+
+    dbg!(&metrics);
+
+    let font = ttf_context
+        .load_font("fonts/Roboto-Regular.ttf", metrics.text_size)
+        .unwrap();
+    // let (_ddpi, _hdpi, _vdpi) = video_subsystem.display_dpi(0).unwrap();
 
     let mut canvas = window
         .into_canvas()
@@ -47,6 +56,8 @@ pub fn main() {
         .accelerated()
         .build()
         .unwrap();
+
+    let texture_creator = canvas.texture_creator();
 
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
@@ -75,17 +86,73 @@ pub fn main() {
                 current_question,
                 question_state,
             } => {
+                canvas.set_draw_color(Color::RGB(0xcc, 0xcc, 0xff));
+
                 let question = &game_state.questions[current_question];
                 for i in 0..question_state.clues_shown {
                     if i < 4 {
+                        let x = (metrics.tile_0_pos.0 + metrics.tile_x_stride * i as u32) as i32;
+                        let y = metrics.tile_0_pos.1 as i32;
+                        let width = metrics.tile_size.0;
+                        let height = metrics.tile_size.1;
+                        canvas.fill_rect(Rect::new(x, y, width, height)).unwrap();
                         match question.clues {
-                            QuestionClues::TextClues(ref clues) => canvas
-                                .string(100, 100 * i as i16, &clues[i], Color::WHITE)
-                                .unwrap(),
+                            QuestionClues::TextClues(ref clues) => {
+                                let text_surface = font
+                                    .render(&clues[i])
+                                    .blended_wrapped(
+                                        Color::RGB(0x33, 0x33, 0x33),
+                                        metrics.tile_size.0,
+                                    )
+                                    .unwrap();
+
+                                let text_texture = texture_creator
+                                    .create_texture_from_surface(&text_surface)
+                                    .unwrap();
+
+                                canvas
+                                    .copy(
+                                        &text_texture,
+                                        None,
+                                        Some(Rect::new(
+                                            x,
+                                            y,
+                                            text_texture.query().width,
+                                            text_texture.query().height,
+                                        )),
+                                    )
+                                    .unwrap();
+                            }
                         }
                     } else {
                         canvas
-                            .string(100, 100 * i as i16, &question.connection, Color::WHITE)
+                            .fill_rect(Rect::new(
+                                metrics.answer_pos.0 as i32,
+                                metrics.answer_pos.1 as i32,
+                                metrics.answer_size.0,
+                                metrics.answer_size.1,
+                            ))
+                            .unwrap();
+                        let text_surface = font
+                            .render(&question.connection)
+                            .blended_wrapped(Color::RGB(0x33, 0x33, 0x33), metrics.answer_size.0)
+                            .unwrap();
+
+                        let text_texture = texture_creator
+                            .create_texture_from_surface(&text_surface)
+                            .unwrap();
+
+                        canvas
+                            .copy(
+                                &text_texture,
+                                None,
+                                Some(Rect::new(
+                                    metrics.answer_pos.0 as i32,
+                                    metrics.answer_pos.1 as i32,
+                                    text_texture.query().width,
+                                    text_texture.query().height,
+                                )),
+                            )
                             .unwrap();
                     }
                 }
@@ -121,8 +188,6 @@ impl GameState {
                 ref mut current_question,
                 ref mut question_state,
             } => {
-                dbg!(*current_question);
-                dbg!(*question_state);
                 if question_state.clues_shown < 5 {
                     question_state.clues_shown += 1;
                 } else if *current_question + 1 < self.questions.len() {
@@ -254,4 +319,49 @@ enum QuestionClues {
     TextClues(Vec<String>),
     // PictureClues([;4]),
     // MusicClues([;4]),
+}
+
+#[derive(Debug)]
+struct Metrics {
+    tile_size: (u32, u32),
+    tile_0_pos: (u32, u32),
+    tile_x_stride: u32,
+    answer_size: (u32, u32),
+    answer_pos: (u32, u32),
+    text_size: u16,
+}
+
+impl Metrics {
+    fn from_window_dimensions(window_dimensions: (u32, u32)) -> Self {
+        let (width, height) = window_dimensions;
+
+        // width = 2 * tile_0_pos.x + 3 * intertile_spacing + 4 * tile_width
+        // constrained by all of them being integers
+        // tile width is 4 parts, intertile spacing is 1 part, margin is 1 part
+        // these formulas give pretty reasonable results
+
+        let tile_width = width * 4 / 21;
+        let rem = width - 4 * tile_width;
+        let tile_spacing = rem / 5 + (rem - rem / 5) % 2;
+        let margin = (rem - tile_spacing * 3) / 2;
+
+        assert_eq!(tile_width * 4 + tile_spacing * 3 + margin * 2, width);
+
+        let tile_height = tile_width * 3 / 4; // might need to compensate for aspect ratio here
+        let answer_width = 4 * tile_width + 3 * tile_spacing;
+        let answer_height = tile_height / 2;
+        let text_size = (answer_height * 2 / 5) as u16;
+
+        let answer_ypos = height - margin - answer_height;
+        let tile_ypos = answer_ypos - tile_spacing - tile_height;
+
+        Metrics {
+            tile_size: (tile_width, tile_height),
+            tile_0_pos: (margin, tile_ypos),
+            tile_x_stride: tile_width + tile_spacing,
+            answer_size: (answer_width, answer_height),
+            answer_pos: (margin, answer_ypos),
+            text_size,
+        }
+    }
 }
