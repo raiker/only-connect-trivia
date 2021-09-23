@@ -110,13 +110,13 @@ pub fn main() {
 
         // render each of the clue tiles ahead of time. Hopefully won't cause too much jank...
         if rerender_tiles {
-            eprintln!("Rendering");
             match game_state.phase_state {
                 GamePhaseState::Questions {
                     current_question, ..
                 } => {
                     let question = &game_state.questions[current_question];
 
+                    // Fill the clue tiles
                     let textures_vec = tile_textures
                         .iter_mut()
                         .enumerate()
@@ -136,6 +136,7 @@ pub fn main() {
                                     &font,
                                     metrics.tile_size.0,
                                     metrics.tile_size.1,
+                                    metrics.padding,
                                 )
                                 .unwrap(),
                             };
@@ -149,6 +150,32 @@ pub fn main() {
                             // no need to present, apparently
                         })
                         .unwrap();
+
+                    // fill the connection tile
+                    canvas
+                        .with_texture_canvas(&mut answer_texture, |texture_canvas| {
+                            let local_texture_creator = texture_canvas.texture_creator();
+
+                            texture_canvas.set_draw_color(TILE_BACKGROUND_COLOUR);
+                            texture_canvas.clear();
+
+                            let content_surface = render_text(
+                                &question.connection,
+                                &font,
+                                metrics.answer_size.0,
+                                metrics.answer_size.1,
+                                metrics.padding,
+                            )
+                            .unwrap();
+
+                            let content_texture = local_texture_creator
+                                .create_texture_from_surface(content_surface)
+                                .unwrap();
+
+                            texture_canvas.copy(&content_texture, None, None).unwrap();
+                            // no need to present, apparently
+                        })
+                        .unwrap();
                 }
                 _ => {}
             }
@@ -157,12 +184,11 @@ pub fn main() {
         match game_state.phase_state {
             GamePhaseState::StartPage => canvas.string(100, 100, "Start", Color::WHITE).unwrap(),
             GamePhaseState::Questions {
-                current_question,
                 question_state,
+                ..
             } => {
                 canvas.set_draw_color(Color::RGB(0xcc, 0xcc, 0xff));
 
-                let question = &game_state.questions[current_question];
                 for i in 0..question_state.clues_shown {
                     if i < 4 {
                         let x = (metrics.tile_0_pos.0 + metrics.tile_x_stride * i as u32) as i32;
@@ -173,38 +199,13 @@ pub fn main() {
 
                         canvas.copy(&tile_textures[i], None, dst_rect).unwrap();
                     } else {
-                        canvas
-                            .fill_rect(Rect::new(
-                                metrics.answer_pos.0 as i32,
-                                metrics.answer_pos.1 as i32,
-                                metrics.answer_size.0,
-                                metrics.answer_size.1,
-                            ))
-                            .unwrap();
-                        let text_surface = font
-                            .render(&question.connection)
-                            .blended_wrapped(
-                                Color::RGB(0x33, 0x33, 0x33),
-                                metrics.answer_size.0 - 2 * metrics.padding,
-                            )
-                            .unwrap();
-
-                        let text_texture = texture_creator
-                            .create_texture_from_surface(&text_surface)
-                            .unwrap();
-
-                        canvas
-                            .copy(
-                                &text_texture,
-                                None,
-                                Some(Rect::new(
-                                    (metrics.answer_pos.0 + metrics.padding) as i32,
-                                    (metrics.answer_pos.1 + metrics.padding) as i32,
-                                    text_texture.query().width,
-                                    text_texture.query().height,
-                                )),
-                            )
-                            .unwrap();
+                        let dst_rect = Rect::new(
+                            metrics.answer_pos.0 as i32,
+                            metrics.answer_pos.1 as i32,
+                            metrics.answer_size.0,
+                            metrics.answer_size.1,
+                        );
+                        canvas.copy(&answer_texture, None, dst_rect).unwrap();
                     }
                 }
             }
@@ -434,8 +435,10 @@ fn render_text<'a>(
     font: &Font,
     width: u32,
     height: u32,
+    padding: u32,
 ) -> Result<Surface<'a>, String> {
-    let splits = split_text(text, font, width);
+    let text_width = width - 2 * padding;
+    let splits = split_text(text, font, text_width);
 
     let mut output_surface = Surface::new(width, height, sdl2::pixels::PixelFormatEnum::RGBA8888)?;
 
