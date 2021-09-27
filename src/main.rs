@@ -22,15 +22,15 @@ mod questions;
 // mod questions2;
 
 const BACKGROUND_GREY: Color = Color::RGB(0x66, 0x66, 0x66);
-const BACKGROUND_RED: Color = Color::RGB(0xcc, 0x33, 0x33);
+const BACKGROUND_RED: Color = Color::RGB(0x66, 0x33, 0x33);
 const BACKGROUND_BLUE: Color = Color::RGB(0x33, 0x33, 0xcc);
 const TILE_TEXT_COLOUR: Color = Color::RGB(0x33, 0x33, 0x33);
-const TILE_BACKGROUND_COLOUR: Color = Color::RGB(0x99, 0x99, 0xff);
+const TILE_BACKGROUND_COLOUR: Color = Color::RGB(0x99, 0x99, 0x99);
 const PROGRESS_BAR_BACKGROUND_COLOUR: Color = Color::RGB(0x33, 0x33, 0x33);
 const PROGRESS_BAR_FOREGROUND_COLOUR: Color = Color::RGB(0x99, 0x99, 0x99);
 const PROGRESS_BAR_TEXT_COLOUR: Color = Color::RGB(0xff, 0xff, 0xff);
 
-const TIME_PER_QUESTION: Duration = Duration::from_secs(10);
+const TIME_PER_QUESTION: Duration = Duration::from_secs(45);
 
 #[derive(Debug)]
 enum BackgroundColour {
@@ -124,8 +124,9 @@ impl ConnectionPhase {
             ConnectionPhase::OneClueShown
             | ConnectionPhase::TwoCluesShown
             | ConnectionPhase::ThreeCluesShown
-            | ConnectionPhase::FourCluesShown => true,
-            ConnectionPhase::PassedOver | ConnectionPhase::AnswerShown => false,
+            | ConnectionPhase::FourCluesShown
+            | ConnectionPhase::PassedOver => true,
+            ConnectionPhase::AnswerShown => false,
         }
     }
 }
@@ -515,7 +516,7 @@ pub fn main() {
         .window("Only Connect Trivia", 1280, 720)
         .position_centered()
         .allow_highdpi()
-        // .fullscreen_desktop()
+        .fullscreen_desktop()
         .build()
         .unwrap();
 
@@ -635,10 +636,15 @@ pub fn main() {
                 canvas.copy(&banner_texture, None, None).unwrap();
             }
             QuestionState::TitlePage { ref title } => {
-                let banner_surface =
-                    render_text(title, &font, metrics.width, metrics.height, metrics.padding,
-                        TILE_TEXT_COLOUR)
-                        .unwrap();
+                let banner_surface = render_text(
+                    title,
+                    &font,
+                    metrics.width,
+                    metrics.height,
+                    metrics.padding,
+                    TILE_TEXT_COLOUR,
+                )
+                .unwrap();
 
                 let banner_texture = texture_creator
                     .create_texture_from_surface(banner_surface)
@@ -706,8 +712,12 @@ pub fn main() {
 
                     let last_tile_shown_index = phase.clues_to_show() - 1;
 
-                    let background_dst_rect = metrics.get_progress_bar_dest_rect(last_tile_shown_index);
-                    let fill_dst_rect = metrics.get_progress_bar_fill_dest_rect(last_tile_shown_index, progress_bar_fraction);
+                    let background_dst_rect =
+                        metrics.get_progress_bar_dest_rect(last_tile_shown_index);
+                    let fill_dst_rect = metrics.get_progress_bar_fill_dest_rect(
+                        last_tile_shown_index,
+                        progress_bar_fraction,
+                    );
 
                     // draw bar background
                     canvas.set_draw_color(PROGRESS_BAR_BACKGROUND_COLOUR);
@@ -729,7 +739,7 @@ pub fn main() {
                         metrics.tile_size.0,
                         metrics.progress_bar_height,
                         metrics.padding,
-                        PROGRESS_BAR_TEXT_COLOUR
+                        PROGRESS_BAR_TEXT_COLOUR,
                     )
                     .unwrap();
 
@@ -737,7 +747,9 @@ pub fn main() {
                         .create_texture_from_surface(text_surface)
                         .unwrap();
 
-                    canvas.copy(&text_texture, None, background_dst_rect).unwrap();
+                    canvas
+                        .copy(&text_texture, None, background_dst_rect)
+                        .unwrap();
                 }
             }
             QuestionState::EndPage => {
