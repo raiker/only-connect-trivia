@@ -21,15 +21,30 @@ connection: Battles of the Western Front (WW1)
 connection: Potatoes
     Kestrel
     Yukon Gold
-    Kipfler
     Dutch Cream
+    Kipfler
 connection: Toilet _____
     Brush
     Spray
     Seat
     Paper
 connection: Anagrams of countries
-    Regalia
-    Panel
-    Also
-    Rain
+    regalia
+    panel
+    also
+    rain
+connection: NZ supermarket chains
+    Countdown
+    Foursquare
+    Pak'nSave
+    New World
+connection: Map projections
+    Boggs eumorphic
+    Gall–Peters
+    Equirectangular
+    Mercator
+connection: Countries without A, E or I
+    Togo
+    Cyprus
+    Comoros
+    Morocco

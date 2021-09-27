@@ -1,10 +1,11 @@
-connection: Taylor Swift number 1 Australian singles
-    Look What You Made Me Do
-    Cardigan
-    Bad Blood
-    Shake It Off
-connection: DoTA 2 Heroes
-    Oracle
-    Spectre
-    Doom
-    Enigma
+Warmup (6 questions)
+    connection: Taylor Swift number 1 Australian singles
+        Look What You Made Me Do
+        Cardigan
+        Bad Blood
+        Shake It Off
+    connection: DoTA 2 Heroes
+        Oracle
+        Spectre
+        Doom
+        Enigma

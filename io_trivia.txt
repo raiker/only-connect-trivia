@@ -1,0 +1,4 @@
+include_shuffle: ./warmup.txt
+include_shuffle: ./questions/easy_mix_20/easy_mix_20.txt
+# include_shuffle: ./medium_mix_20.txt
+# include_shuffle: ./hard_mix_20.txt

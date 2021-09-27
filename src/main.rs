@@ -1,5 +1,7 @@
-#![feature(div_duration)]
+#![feature(div_duration, generators, generator_trait)]
 use lazy_static::lazy_static;
+use questions::{Question, QuestionClues, QuestionSet, QuestionType};
+use rand::Rng;
 use regex::Regex;
 use sdl2::event::Event;
 use sdl2::gfx::primitives::DrawRenderer;
@@ -9,12 +11,436 @@ use sdl2::rect::Rect;
 use sdl2::render::Texture;
 use sdl2::surface::Surface;
 use sdl2::ttf::Font;
-use std::io::{prelude::*, BufReader};
-use std::path::Path;
-use std::time::{Duration, Instant};
+use std::{
+    ops::Generator,
+    ops::GeneratorState,
+    pin::Pin,
+    time::{Duration, Instant},
+};
 
-const TEXT_COLOUR: Color = Color::RGB(0x33, 0x33, 0x33);
+mod questions;
+// mod questions2;
+
+const BACKGROUND_GREY: Color = Color::RGB(0x66, 0x66, 0x66);
+const BACKGROUND_RED: Color = Color::RGB(0xcc, 0x33, 0x33);
+const BACKGROUND_BLUE: Color = Color::RGB(0x33, 0x33, 0xcc);
+const TILE_TEXT_COLOUR: Color = Color::RGB(0x33, 0x33, 0x33);
 const TILE_BACKGROUND_COLOUR: Color = Color::RGB(0x99, 0x99, 0xff);
+const PROGRESS_BAR_BACKGROUND_COLOUR: Color = Color::RGB(0x33, 0x33, 0x33);
+const PROGRESS_BAR_FOREGROUND_COLOUR: Color = Color::RGB(0x99, 0x99, 0x99);
+const PROGRESS_BAR_TEXT_COLOUR: Color = Color::RGB(0xff, 0xff, 0xff);
+
+const TIME_PER_QUESTION: Duration = Duration::from_secs(10);
+
+#[derive(Debug)]
+enum BackgroundColour {
+    Red,
+    Blue,
+    Grey,
+}
+
+#[derive(Debug)]
+enum ConnectionPhase {
+    OneClueShown,
+    TwoCluesShown,
+    ThreeCluesShown,
+    FourCluesShown,
+    PassedOver,
+    AnswerShown,
+}
+
+impl ConnectionPhase {
+    pub fn get_points(&self) -> i32 {
+        match self {
+            ConnectionPhase::OneClueShown => 5,
+            ConnectionPhase::TwoCluesShown => 3,
+            ConnectionPhase::ThreeCluesShown => 2,
+            ConnectionPhase::FourCluesShown => 1,
+            ConnectionPhase::PassedOver => 1,
+            ConnectionPhase::AnswerShown => unreachable!(),
+        }
+    }
+
+    pub fn pass_over(&mut self) {
+        match self {
+            ConnectionPhase::OneClueShown
+            | ConnectionPhase::TwoCluesShown
+            | ConnectionPhase::ThreeCluesShown
+            | ConnectionPhase::FourCluesShown => *self = ConnectionPhase::PassedOver,
+            ConnectionPhase::PassedOver | ConnectionPhase::AnswerShown => unreachable!(),
+        }
+    }
+
+    pub fn show_answer(&mut self) {
+        match self {
+            ConnectionPhase::OneClueShown
+            | ConnectionPhase::TwoCluesShown
+            | ConnectionPhase::ThreeCluesShown
+            | ConnectionPhase::FourCluesShown
+            | ConnectionPhase::PassedOver => *self = ConnectionPhase::AnswerShown,
+            ConnectionPhase::AnswerShown => unreachable!(),
+        }
+    }
+
+    pub fn next(&mut self) {
+        match self {
+            ConnectionPhase::OneClueShown => *self = ConnectionPhase::TwoCluesShown,
+            ConnectionPhase::TwoCluesShown => *self = ConnectionPhase::ThreeCluesShown,
+            ConnectionPhase::ThreeCluesShown => *self = ConnectionPhase::FourCluesShown,
+            ConnectionPhase::FourCluesShown => *self = ConnectionPhase::FourCluesShown,
+            ConnectionPhase::PassedOver | ConnectionPhase::AnswerShown => unreachable!(),
+        }
+    }
+
+    pub fn is_passed_over(&self) -> bool {
+        if let ConnectionPhase::PassedOver = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_answer_shown(&self) -> bool {
+        if let ConnectionPhase::AnswerShown = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn clues_to_show(&self) -> usize {
+        match self {
+            ConnectionPhase::OneClueShown => 1,
+            ConnectionPhase::TwoCluesShown => 2,
+            ConnectionPhase::ThreeCluesShown => 3,
+            ConnectionPhase::FourCluesShown => 4,
+            ConnectionPhase::PassedOver => 4,
+            ConnectionPhase::AnswerShown => 4,
+        }
+    }
+
+    pub fn is_progress_bar_shown(&self) -> bool {
+        match self {
+            ConnectionPhase::OneClueShown
+            | ConnectionPhase::TwoCluesShown
+            | ConnectionPhase::ThreeCluesShown
+            | ConnectionPhase::FourCluesShown => true,
+            ConnectionPhase::PassedOver | ConnectionPhase::AnswerShown => false,
+        }
+    }
+}
+
+#[derive(Debug)]
+enum SequencePhase {
+    OneClueShown,
+    TwoCluesShown,
+    ThreeCluesShown,
+    PassedOver,
+    AnswerShown,
+}
+
+impl SequencePhase {
+    pub fn get_points(&self) -> i32 {
+        match self {
+            SequencePhase::OneClueShown => 5,
+            SequencePhase::TwoCluesShown => 3,
+            SequencePhase::ThreeCluesShown => 2,
+            SequencePhase::PassedOver => 1,
+            SequencePhase::AnswerShown => unreachable!(),
+        }
+    }
+
+    pub fn pass_over(&mut self) {
+        match self {
+            SequencePhase::OneClueShown
+            | SequencePhase::TwoCluesShown
+            | SequencePhase::ThreeCluesShown => *self = SequencePhase::PassedOver,
+            SequencePhase::PassedOver | SequencePhase::AnswerShown => unreachable!(),
+        }
+    }
+
+    pub fn show_answer(&mut self) {
+        match self {
+            SequencePhase::OneClueShown
+            | SequencePhase::TwoCluesShown
+            | SequencePhase::ThreeCluesShown
+            | SequencePhase::PassedOver => *self = SequencePhase::AnswerShown,
+            SequencePhase::AnswerShown => unreachable!(),
+        }
+    }
+
+    pub fn next(&mut self) {
+        match self {
+            SequencePhase::OneClueShown => *self = SequencePhase::TwoCluesShown,
+            SequencePhase::TwoCluesShown => *self = SequencePhase::ThreeCluesShown,
+            SequencePhase::ThreeCluesShown => *self = SequencePhase::ThreeCluesShown,
+            SequencePhase::PassedOver | SequencePhase::AnswerShown => unreachable!(),
+        }
+    }
+
+    pub fn is_passed_over(&self) -> bool {
+        if let SequencePhase::PassedOver = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_answer_shown(&self) -> bool {
+        if let SequencePhase::AnswerShown = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn clues_to_show(&self) -> usize {
+        match self {
+            SequencePhase::OneClueShown => 1,
+            SequencePhase::TwoCluesShown => 2,
+            SequencePhase::ThreeCluesShown => 3,
+            SequencePhase::PassedOver => 3,
+            SequencePhase::AnswerShown => 4,
+        }
+    }
+
+    pub fn is_progress_bar_shown(&self) -> bool {
+        match self {
+            SequencePhase::OneClueShown
+            | SequencePhase::TwoCluesShown
+            | SequencePhase::ThreeCluesShown => true,
+            SequencePhase::PassedOver | SequencePhase::AnswerShown => false,
+        }
+    }
+}
+
+#[derive(Debug)]
+enum QuestionPhase {
+    Connection(ConnectionPhase),
+    Sequence(SequencePhase),
+}
+
+impl QuestionPhase {
+    pub fn get_points(&self) -> i32 {
+        match self {
+            QuestionPhase::Connection(p) => p.get_points(),
+            QuestionPhase::Sequence(p) => p.get_points(),
+        }
+    }
+
+    pub fn pass_over(&mut self) {
+        match self {
+            QuestionPhase::Connection(p) => p.pass_over(),
+            QuestionPhase::Sequence(p) => p.pass_over(),
+        }
+    }
+
+    pub fn show_answer(&mut self) {
+        match self {
+            QuestionPhase::Connection(p) => p.show_answer(),
+            QuestionPhase::Sequence(p) => p.show_answer(),
+        }
+    }
+
+    pub fn next(&mut self) {
+        match self {
+            QuestionPhase::Connection(p) => p.next(),
+            QuestionPhase::Sequence(p) => p.next(),
+        }
+    }
+
+    pub fn is_passed_over(&self) -> bool {
+        match self {
+            QuestionPhase::Connection(p) => p.is_passed_over(),
+            QuestionPhase::Sequence(p) => p.is_passed_over(),
+        }
+    }
+
+    pub fn is_answer_shown(&self) -> bool {
+        match self {
+            QuestionPhase::Connection(p) => p.is_answer_shown(),
+            QuestionPhase::Sequence(p) => p.is_answer_shown(),
+        }
+    }
+
+    pub fn clues_to_show(&self) -> usize {
+        match self {
+            QuestionPhase::Connection(p) => p.clues_to_show(),
+            QuestionPhase::Sequence(p) => p.clues_to_show(),
+        }
+    }
+
+    pub fn is_progress_bar_shown(&self) -> bool {
+        match self {
+            QuestionPhase::Connection(p) => p.is_progress_bar_shown(),
+            QuestionPhase::Sequence(p) => p.is_progress_bar_shown(),
+        }
+    }
+}
+
+#[derive(Debug, Default, Copy, Clone)]
+struct KeyboardInput {
+    next: bool,
+    stop: bool,
+    correct: bool,
+    incorrect: bool,
+}
+
+#[derive(Debug)]
+enum QuestionState {
+    StartPage,
+    TitlePage {
+        title: String,
+    },
+    Question {
+        clues: QuestionClues,
+        connection: String,
+        phase: QuestionPhase,
+        offered_to_red: bool, // question initially given to red team
+        started: Instant,
+        stopped: Option<Instant>,
+    },
+    EndPage,
+}
+
+#[derive(Debug)]
+struct UpdateResult {
+    next_question: bool,
+    red_points_change: i32,
+    blue_points_change: i32,
+}
+
+impl UpdateResult {
+    pub fn no_change() -> Self {
+        Self {
+            next_question: false,
+            red_points_change: 0,
+            blue_points_change: 0,
+        }
+    }
+
+    pub fn next_question() -> Self {
+        Self {
+            next_question: true,
+            red_points_change: 0,
+            blue_points_change: 0,
+        }
+    }
+
+    pub fn points(points: i32, to_red_team: bool) -> Self {
+        if to_red_team {
+            Self {
+                next_question: false,
+                red_points_change: points,
+                blue_points_change: 0,
+            }
+        } else {
+            Self {
+                next_question: false,
+                red_points_change: 0,
+                blue_points_change: points,
+            }
+        }
+    }
+}
+
+impl QuestionState {
+    /// Return value is whether to advance to the next question
+    pub fn update(&mut self, input: KeyboardInput) -> UpdateResult {
+        match self {
+            QuestionState::StartPage | QuestionState::TitlePage { .. } => {
+                if input.next {
+                    UpdateResult::next_question()
+                } else {
+                    UpdateResult::no_change()
+                }
+            }
+            QuestionState::Question {
+                phase,
+                started,
+                stopped,
+                offered_to_red,
+                ..
+            } => {
+                if phase.is_answer_shown() {
+                    if input.next {
+                        UpdateResult::next_question()
+                    } else {
+                        UpdateResult::no_change()
+                    }
+                } else if phase.is_passed_over() {
+                    if input.correct {
+                        let points = phase.get_points();
+                        phase.show_answer();
+                        UpdateResult::points(points, !*offered_to_red)
+                    } else if input.incorrect {
+                        phase.show_answer();
+                        UpdateResult::no_change()
+                    } else {
+                        UpdateResult::no_change()
+                    }
+                } else if let Some(_) = stopped {
+                    // the clock has been stopped
+                    if input.correct {
+                        let points = phase.get_points();
+                        phase.show_answer();
+                        UpdateResult::points(points, *offered_to_red)
+                    } else if input.incorrect {
+                        phase.pass_over();
+                        UpdateResult::no_change()
+                    } else {
+                        UpdateResult::no_change()
+                    }
+                } else {
+                    // clock is still running
+                    if Instant::now() - *started >= TIME_PER_QUESTION {
+                        // out of time
+                        phase.pass_over();
+                        UpdateResult::no_change()
+                    } else if input.next {
+                        phase.next();
+                        UpdateResult::no_change()
+                    } else if input.stop {
+                        *stopped = Some(Instant::now());
+                        UpdateResult::no_change()
+                    } else {
+                        UpdateResult::no_change()
+                    }
+                }
+            }
+            QuestionState::EndPage => UpdateResult::no_change(), // no way out!
+        }
+    }
+
+    pub fn get_background_colour(&self) -> BackgroundColour {
+        match self {
+            QuestionState::StartPage | QuestionState::TitlePage { .. } | QuestionState::EndPage => {
+                BackgroundColour::Grey
+            }
+            QuestionState::Question {
+                phase,
+                offered_to_red,
+                ..
+            } => {
+                if phase.is_answer_shown() {
+                    BackgroundColour::Grey
+                } else if phase.is_passed_over() {
+                    if *offered_to_red {
+                        BackgroundColour::Blue
+                    } else {
+                        BackgroundColour::Red
+                    }
+                } else {
+                    if *offered_to_red {
+                        BackgroundColour::Red
+                    } else {
+                        BackgroundColour::Blue
+                    }
+                }
+            }
+        }
+    }
+}
 
 pub fn main() {
     unsafe {
@@ -25,7 +451,9 @@ pub fn main() {
     let video_subsystem = sdl_context.video().unwrap();
     let ttf_context = sdl2::ttf::init().unwrap();
 
-    let questions = match load_questions("./connections.txt") {
+    // questions2::generate_test();
+
+    let questions = match questions::load_question_sets("./io_trivia.txt") {
         Ok(qs) => qs,
         Err(es) => {
             eprintln!("Error(s) loading file");
@@ -36,17 +464,58 @@ pub fn main() {
         }
     };
 
-    let mut game_state = GameState {
-        questions,
-        time_per_question: Duration::from_secs(45),
-        phase_state: GamePhaseState::StartPage,
+    let mut question_state_generator = || {
+        let mut team_is_red: bool = rand::thread_rng().gen();
+
+        yield QuestionState::StartPage;
+
+        for set in questions {
+            yield QuestionState::TitlePage { title: set.title };
+            for q in set.questions {
+                match q.question_type {
+                    QuestionType::Connection => {
+                        yield QuestionState::Question {
+                            clues: q.clues,
+                            connection: q.connection,
+                            phase: QuestionPhase::Connection(ConnectionPhase::OneClueShown),
+                            offered_to_red: team_is_red,
+                            started: Instant::now(),
+                            stopped: None,
+                        }
+                    }
+                    QuestionType::Sequence => {
+                        yield QuestionState::Question {
+                            clues: q.clues,
+                            connection: q.connection,
+                            phase: QuestionPhase::Sequence(SequencePhase::OneClueShown),
+                            offered_to_red: team_is_red,
+                            started: Instant::now(),
+                            stopped: None,
+                        }
+                    }
+                }
+                team_is_red = !team_is_red;
+            }
+        }
+
+        yield QuestionState::EndPage;
     };
+
+    let mut question_state: QuestionState =
+        if let GeneratorState::Yielded(x) = Pin::new(&mut question_state_generator).resume(()) {
+            x
+        } else {
+            unreachable!()
+        };
+
+    let mut red_points = 0;
+    let mut blue_points = 0;
 
     let window = video_subsystem
         .window("Only Connect Trivia", 1280, 720)
         .position_centered()
         .allow_highdpi()
-        .fullscreen_desktop()
+        // .fullscreen_desktop()
         .build()
         .unwrap();
 
@@ -68,13 +537,15 @@ pub fn main() {
 
     let mut tile_textures: Vec<Texture> = (0..4)
         .map(|_| {
-            texture_creator
+            let mut tex = texture_creator
                 .create_texture_target(
                     sdl2::pixels::PixelFormatEnum::RGBA8888,
                     metrics.tile_size.0,
                     metrics.tile_size.1,
                 )
-                .unwrap()
+                .unwrap();
+            tex.set_blend_mode(sdl2::render::BlendMode::Blend);
+            tex
         })
         .collect();
     let mut answer_texture: Texture = texture_creator
@@ -84,13 +555,11 @@ pub fn main() {
             metrics.answer_size.1,
         )
         .unwrap();
+    answer_texture.set_blend_mode(sdl2::render::BlendMode::Blend);
 
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
-        canvas.set_draw_color(Color::RGB(32, 64, 192));
-        canvas.clear();
-
-        let mut rerender_tiles = false;
+        let mut input = KeyboardInput::default();
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. }
@@ -99,295 +568,457 @@ pub fn main() {
                     ..
                 } => break 'running,
                 Event::KeyDown {
-                    keycode: Some(Keycode::Space),
+                    keycode: Some(Keycode::N),
                     repeat: false,
                     ..
-                } => rerender_tiles = game_state.advance(),
+                } => input.next = true,
+                Event::KeyDown {
+                    keycode: Some(Keycode::S),
+                    repeat: false,
+                    ..
+                } => input.stop = true,
+                Event::KeyDown {
+                    keycode: Some(Keycode::C),
+                    repeat: false,
+                    ..
+                } => input.correct = true,
+                Event::KeyDown {
+                    keycode: Some(Keycode::I),
+                    repeat: false,
+                    ..
+                } => input.incorrect = true,
                 _ => {}
             }
         }
-        // The rest of the game loop goes here...
 
-        // render each of the clue tiles ahead of time. Hopefully won't cause too much jank...
-        if rerender_tiles {
-            match game_state.phase_state {
-                GamePhaseState::Questions {
-                    current_question, ..
-                } => {
-                    let question = &game_state.questions[current_question];
+        let update_result = question_state.update(input);
 
-                    // Fill the clue tiles
-                    let textures_vec = tile_textures
-                        .iter_mut()
-                        .enumerate()
-                        .map(|(i, t)| (t, i))
-                        .collect::<Vec<_>>();
+        blue_points += update_result.blue_points_change;
+        red_points += update_result.red_points_change;
 
-                    canvas
-                        .with_multiple_texture_canvas(textures_vec.iter(), |texture_canvas, i| {
-                            let local_texture_creator = texture_canvas.texture_creator();
+        if update_result.next_question {
+            match Pin::new(&mut question_state_generator).resume(()) {
+                GeneratorState::Yielded(x) => question_state = x,
+                GeneratorState::Complete(_) => break 'running,
+            }
+        }
 
-                            texture_canvas.set_draw_color(TILE_BACKGROUND_COLOUR);
-                            texture_canvas.clear();
+        // drawing code here
+        match question_state.get_background_colour() {
+            BackgroundColour::Red => canvas.set_draw_color(BACKGROUND_RED),
+            BackgroundColour::Blue => canvas.set_draw_color(BACKGROUND_BLUE),
+            BackgroundColour::Grey => canvas.set_draw_color(BACKGROUND_GREY),
+        }
 
-                            let content_surface = match question.clues {
-                                QuestionClues::TextClues(ref clues) => render_text(
-                                    &clues[*i],
-                                    &font,
-                                    metrics.tile_size.0,
-                                    metrics.tile_size.1,
-                                    metrics.padding,
-                                )
-                                .unwrap(),
-                            };
+        canvas.clear();
 
-                            let content_texture = local_texture_creator
-                                .create_texture_from_surface(content_surface)
-                                .unwrap();
+        // let rerender_tiles = game_state.update(input);
 
-                            texture_canvas.copy(&content_texture, None, None).unwrap();
+        // // render each of the clue tiles ahead of time. Hopefully won't cause too much jank...
+        // if rerender_tiles {
+        match question_state {
+            QuestionState::StartPage => {
+                let banner_surface = render_text(
+                    "Only Connect",
+                    &font,
+                    metrics.width,
+                    metrics.height,
+                    metrics.padding,
+                    TILE_TEXT_COLOUR,
+                )
+                .unwrap();
 
-                            // no need to present, apparently
-                        })
+                let banner_texture = texture_creator
+                    .create_texture_from_surface(banner_surface)
+                    .unwrap();
+
+                canvas.copy(&banner_texture, None, None).unwrap();
+            }
+            QuestionState::TitlePage { ref title } => {
+                let banner_surface =
+                    render_text(title, &font, metrics.width, metrics.height, metrics.padding,
+                        TILE_TEXT_COLOUR)
                         .unwrap();
 
-                    // fill the connection tile
-                    canvas
-                        .with_texture_canvas(&mut answer_texture, |texture_canvas| {
-                            let local_texture_creator = texture_canvas.texture_creator();
+                let banner_texture = texture_creator
+                    .create_texture_from_surface(banner_surface)
+                    .unwrap();
 
-                            texture_canvas.set_draw_color(TILE_BACKGROUND_COLOUR);
-                            texture_canvas.clear();
-
-                            let content_surface = render_text(
-                                &question.connection,
+                canvas.copy(&banner_texture, None, None).unwrap();
+            }
+            QuestionState::Question {
+                ref clues,
+                ref phase,
+                ref connection,
+                ref started,
+                ref stopped,
+                ..
+            } => {
+                for i in 0..phase.clues_to_show() {
+                    let dst_rect = metrics.get_tile_dest_rect(i);
+                    canvas.set_draw_color(TILE_BACKGROUND_COLOUR);
+                    canvas.fill_rect(dst_rect).unwrap();
+                    match clues {
+                        QuestionClues::TextClues(clues) => {
+                            let text_surface = render_text(
+                                &clues[i],
                                 &font,
-                                metrics.answer_size.0,
-                                metrics.answer_size.1,
+                                metrics.tile_size.0,
+                                metrics.tile_size.1,
                                 metrics.padding,
+                                TILE_TEXT_COLOUR,
                             )
                             .unwrap();
 
-                            let content_texture = local_texture_creator
-                                .create_texture_from_surface(content_surface)
+                            let text_texture = texture_creator
+                                .create_texture_from_surface(text_surface)
                                 .unwrap();
 
-                            texture_canvas.copy(&content_texture, None, None).unwrap();
-                            // no need to present, apparently
-                        })
-                        .unwrap();
-                }
-                _ => {}
-            }
-        }
-
-        match game_state.phase_state {
-            GamePhaseState::StartPage => canvas.string(100, 100, "Start", Color::WHITE).unwrap(),
-            GamePhaseState::Questions {
-                question_state,
-                ..
-            } => {
-                canvas.set_draw_color(Color::RGB(0xcc, 0xcc, 0xff));
-
-                for i in 0..question_state.clues_shown {
-                    if i < 4 {
-                        let x = (metrics.tile_0_pos.0 + metrics.tile_x_stride * i as u32) as i32;
-                        let y = metrics.tile_0_pos.1 as i32;
-                        let width = metrics.tile_size.0;
-                        let height = metrics.tile_size.1;
-                        let dst_rect = Rect::new(x, y, width, height);
-
-                        canvas.copy(&tile_textures[i], None, dst_rect).unwrap();
-                    } else {
-                        let dst_rect = Rect::new(
-                            metrics.answer_pos.0 as i32,
-                            metrics.answer_pos.1 as i32,
-                            metrics.answer_size.0,
-                            metrics.answer_size.1,
-                        );
-                        canvas.copy(&answer_texture, None, dst_rect).unwrap();
+                            canvas.copy(&text_texture, None, dst_rect).unwrap();
+                        }
                     }
                 }
+                if phase.is_answer_shown() {
+                    let dst_rect = metrics.get_answer_dest_rect();
+                    canvas.set_draw_color(TILE_BACKGROUND_COLOUR);
+                    canvas.fill_rect(dst_rect).unwrap();
+                    let text_surface = render_text(
+                        &connection,
+                        &font,
+                        metrics.answer_size.0,
+                        metrics.answer_size.1,
+                        metrics.padding,
+                        TILE_TEXT_COLOUR,
+                    )
+                    .unwrap();
+
+                    let text_texture = texture_creator
+                        .create_texture_from_surface(text_surface)
+                        .unwrap();
+
+                    canvas.copy(&text_texture, None, dst_rect).unwrap();
+                }
+                if phase.is_progress_bar_shown() {
+                    let stop_time = stopped.unwrap_or(Instant::now());
+                    let time_elapsed = stop_time - *started;
+                    let fraction_time_elapsed = time_elapsed.div_duration_f32(TIME_PER_QUESTION);
+                    let progress_bar_fraction = fraction_time_elapsed.clamp(0.0, 1.0);
+
+                    let last_tile_shown_index = phase.clues_to_show() - 1;
+
+                    let background_dst_rect = metrics.get_progress_bar_dest_rect(last_tile_shown_index);
+                    let fill_dst_rect = metrics.get_progress_bar_fill_dest_rect(last_tile_shown_index, progress_bar_fraction);
+
+                    // draw bar background
+                    canvas.set_draw_color(PROGRESS_BAR_BACKGROUND_COLOUR);
+                    canvas.fill_rect(background_dst_rect).unwrap();
+                    // draw bar fill
+                    canvas.set_draw_color(PROGRESS_BAR_FOREGROUND_COLOUR);
+                    canvas.fill_rect(fill_dst_rect).unwrap();
+
+                    // draw points text overlay
+                    let question_points = phase.get_points();
+                    let overlay_text = match question_points {
+                        1 => "1 point".into(),
+                        _ => format!("{} points", question_points),
+                    };
+
+                    let text_surface = render_text(
+                        &overlay_text,
+                        &font,
+                        metrics.tile_size.0,
+                        metrics.progress_bar_height,
+                        metrics.padding,
+                        PROGRESS_BAR_TEXT_COLOUR
+                    )
+                    .unwrap();
+
+                    let text_texture = texture_creator
+                        .create_texture_from_surface(text_surface)
+                        .unwrap();
+
+                    canvas.copy(&text_texture, None, background_dst_rect).unwrap();
+                }
             }
-            GamePhaseState::EndPage => canvas.string(100, 100, "Game over", Color::WHITE).unwrap(),
+            QuestionState::EndPage => {
+                let banner_surface = render_text(
+                    "Game over",
+                    &font,
+                    metrics.width,
+                    metrics.height,
+                    metrics.padding,
+                    TILE_TEXT_COLOUR,
+                )
+                .unwrap();
+
+                let banner_texture = texture_creator
+                    .create_texture_from_surface(banner_surface)
+                    .unwrap();
+
+                canvas.copy(&banner_texture, None, None).unwrap();
+            } // GamePhaseState::Questions {
+              //     current_set,
+              //     current_question, ..
+              // } => {
+              //     let question = &game_state.questions[current_set].questions[current_question];
+
+              //     // Fill the clue tiles
+              //     let textures_vec = tile_textures
+              //         .iter_mut()
+              //         .enumerate()
+              //         .map(|(i, t)| (t, i))
+              //         .collect::<Vec<_>>();
+
+              //     canvas
+              //         .with_multiple_texture_canvas(textures_vec.iter(), |texture_canvas, i| {
+              //             let local_texture_creator = texture_canvas.texture_creator();
+
+              //             texture_canvas.set_draw_color(Color::RGBA(0, 0, 0, 0));
+              //             texture_canvas.clear();
+
+              //             texture_canvas
+              //                 .rounded_box(
+              //                     0,
+              //                     0,
+              //                     metrics.tile_size.0 as i16,
+              //                     metrics.tile_size.1 as i16,
+              //                     metrics.padding as i16,
+              //                     TILE_BACKGROUND_COLOUR,
+              //                 )
+              //                 .unwrap();
+
+              //             texture_canvas.set_draw_color(Color::RGBA(0, 0, 0, 255));
+              //             let content_surface = match question.clues {
+              //                 QuestionClues::TextClues(ref clues) => render_text(
+              //                     &clues[*i],
+              //                     &font,
+              //                     metrics.tile_size.0,
+              //                     metrics.tile_size.1,
+              //                     metrics.padding,
+              //                 )
+              //                 .unwrap(),
+              //                 QuestionClues::PictureClues(ref clues) => {
+              //                     todo!()
+              //                 }
+              //             };
+              //             let content_texture = local_texture_creator
+              //                 .create_texture_from_surface(content_surface)
+              //                 .unwrap();
+
+              //             texture_canvas.copy(&content_texture, None, None).unwrap();
+
+              //             // no need to present, apparently
+              //         })
+              //         .unwrap();
+
+              //     // fill the connection tile
+              //     canvas
+              //         .with_texture_canvas(&mut answer_texture, |texture_canvas| {
+              //             let local_texture_creator = texture_canvas.texture_creator();
+
+              //             texture_canvas.set_draw_color(Color::RGBA(0, 0, 0, 0));
+              //             texture_canvas.clear();
+
+              //             texture_canvas
+              //                 .rounded_box(
+              //                     0,
+              //                     0,
+              //                     metrics.answer_size.0 as i16,
+              //                     metrics.answer_size.1 as i16,
+              //                     metrics.padding as i16,
+              //                     TILE_BACKGROUND_COLOUR,
+              //                 )
+              //                 .unwrap();
+
+              //             let content_surface = render_text(
+              //                 &question.connection,
+              //                 &font,
+              //                 metrics.answer_size.0,
+              //                 metrics.answer_size.1,
+              //                 metrics.padding,
+              //             )
+              //             .unwrap();
+
+              //             let content_texture = local_texture_creator
+              //                 .create_texture_from_surface(content_surface)
+              //                 .unwrap();
+
+              //             texture_canvas.copy(&content_texture, None, None).unwrap();
+              //             // no need to present, apparently
+              //         })
+              //         .unwrap();
+              // }
         }
+        // }
+
+        // match game_state.phase_state {
+        //     GamePhaseState::StartPage => canvas.string(100, 100, "Start", Color::WHITE).unwrap(),
+        //     GamePhaseState::TitlePage { current_set } => {
+        //         todo!()
+        //     }
+        //     GamePhaseState::Questions {
+        //         question_state,
+        //         current_set,
+        //         current_question,
+        //     } => {
+        //         for i in 0..question_state.clues_shown {
+        //             if i < 4 {
+        //                 let x = (metrics.tile_0_pos.0 + metrics.tile_x_stride * i as u32) as i32;
+        //                 let y = metrics.tile_0_pos.1 as i32;
+        //                 let width = metrics.tile_size.0;
+        //                 let height = metrics.tile_size.1;
+        //                 let dst_rect = Rect::new(x, y, width, height);
+
+        //                 canvas.copy(&tile_textures[i], None, dst_rect).unwrap();
+        //             } else {
+        //                 let dst_rect = Rect::new(
+        //                     metrics.answer_pos.0 as i32,
+        //                     metrics.answer_pos.1 as i32,
+        //                     metrics.answer_size.0,
+        //                     metrics.answer_size.1,
+        //                 );
+        //                 canvas.copy(&answer_texture, None, dst_rect).unwrap();
+        //             }
+        //         }
+
+        //         let question = &game_state.questions[current_question];
+
+        //         // draw timer
+        //         if question_state.clues_shown < 5 {
+        //             let time_elapsed = Instant::now() - question_state.start_time;
+        //             let fraction_time_elapsed =
+        //                 time_elapsed.div_duration_f32(game_state.time_per_question);
+        //             let progress_bar_fraction = fraction_time_elapsed.clamp(0.0, 1.0);
+
+        //             // draw progress bar background
+        //             canvas
+        //                 .rounded_box(
+        //                     metrics.progress_bar_pos.0 as i16,
+        //                     metrics.progress_bar_pos.1 as i16,
+        //                     (metrics.progress_bar_pos.0 + metrics.progress_bar_size.0) as i16,
+        //                     (metrics.progress_bar_pos.1 + metrics.progress_bar_size.1) as i16,
+        //                     10,
+        //                     PROGRESS_BAR_BACKGROUND_COLOUR,
+        //                 )
+        //                 .unwrap();
+
+        //             // draw progress bar foreground
+        //             canvas
+        //                 .rounded_box(
+        //                     metrics.progress_bar_pos.0 as i16 + 5,
+        //                     metrics.progress_bar_pos.1 as i16 + 5,
+        //                     metrics.progress_bar_pos.0 as i16
+        //                         + 5
+        //                         + ((metrics.progress_bar_size.0 - 10) as f32
+        //                             * progress_bar_fraction)
+        //                             .round() as i16,
+        //                     (metrics.progress_bar_pos.1 + metrics.progress_bar_size.1 - 5) as i16,
+        //                     10,
+        //                     PROGRESS_BAR_FOREGROUND_COLOUR,
+        //                 )
+        //                 .unwrap();
+        //         }
+        //     }
+        //     GamePhaseState::EndPage => canvas.string(100, 100, "Game over", Color::WHITE).unwrap(),
+        // }
 
         canvas.present();
         //::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
 }
 
-struct GameState {
-    questions: Vec<Question>,
-    time_per_question: Duration,
-    phase_state: GamePhaseState,
-}
+// struct GameState {
+//     red_score: i32,
+//     blue_score: i32,
+//     is_red_turn: bool,
+//     questions: Vec<QuestionSet>,
+//     time_per_question: Duration,
+//     phase_state: GamePhaseState,
+// }
 
-impl GameState {
-    /// e.g. pressing space
-    /// # Returns
-    /// True if the tiles need to be rerendered
-    /// False otherwise
-    pub fn advance(&mut self) -> bool {
-        match self.phase_state {
-            GamePhaseState::StartPage => {
-                self.phase_state = GamePhaseState::Questions {
-                    current_question: 0,
-                    question_state: QuestionState {
-                        start_time: Instant::now(),
-                        clues_shown: 1,
-                    },
-                };
-                true
-            }
-            GamePhaseState::Questions {
-                ref mut current_question,
-                ref mut question_state,
-            } => {
-                if question_state.clues_shown < 5 {
-                    question_state.clues_shown += 1;
-                    false
-                } else if *current_question + 1 < self.questions.len() {
-                    *current_question += 1;
-                    *question_state = QuestionState {
-                        start_time: Instant::now(),
-                        clues_shown: 1,
-                    };
-                    true
-                } else {
-                    self.phase_state = GamePhaseState::EndPage;
-                    false
-                }
-            }
-            GamePhaseState::EndPage => false,
-        }
-    }
-}
+// impl GameState {
+//     /// Should be called each frame. Checks timers and keyboard input
+//     pub fn update(&mut self, input: KeyboardInput) {
+//         let now = Instant::now();
 
-enum GamePhaseState {
-    StartPage,
-    Questions {
-        current_question: usize,
-        question_state: QuestionState,
-    },
-    EndPage,
-}
+//         match self.phase_state {
+//             GamePhaseState::StartPage => {
+//                 if input.next {
+//                     if self.questions.is_empty() {
+//                         self.phase_state = GamePhaseState::EndPage;
+//                     } else {
+//                         self.phase_state = GamePhaseState::TitlePage {
+//                             current_set: 0
+//                         };
+//                     }
+//                 }
+//             }
+//             GamePhaseState::TitlePage {
+//                 ref mut current_set,
+//             } => {
+//                 if input.next {
+//                     if self.questions[*current_set].questions.is_empty() {
+//                         if current_set + 1 < self.questions.len() {
 
-#[derive(Debug, Copy, Clone)]
-struct QuestionState {
-    start_time: Instant,
-    clues_shown: usize,
-}
+//                         }
+//                     }
+//                 }
+//             },
+//             GamePhaseState::Questions {
+//                 ref mut current_question,
+//                 ref mut question_state,
+//             } => {
+//                 if question_state.clues_shown < 5 {
+//                     question_state.clues_shown += 1;
+//                     false
+//                 } else if *current_question + 1 < self.questions.len() {
+//                     *current_question += 1;
+//                     *question_state = QuestionState {
+//                         start_time: Instant::now(),
+//                         clues_shown: 1,
+//                     };
+//                     true
+//                 } else {
+//                     self.phase_state = GamePhaseState::EndPage;
+//                     false
+//                 }
+//             }
+//             GamePhaseState::EndPage => false,
+//         }
+//     }
+// }
 
-fn load_questions<P: AsRef<Path>>(path: P) -> Result<Vec<Question>, Vec<String>> {
-    let mut questions = Vec::new();
-    let mut errors = Vec::new();
+// enum GamePhaseState {
+//     StartPage,
+//     TitlePage {
+//         current_set: usize,
+//     },
+//     Questions {
+//         current_set: usize,
+//         current_question: usize,
+//         question_state: QuestionState,
+//     },
+//     EndPage,
+// }
 
-    let mut current_question: Option<(QuestionType, String, Vec<String>)> = None;
-
-    let file = match std::fs::File::open(path) {
-        Ok(f) => f,
-        Err(e) => {
-            errors.push(e.to_string());
-            return Err(errors);
-        }
-    };
-
-    let bufreader = BufReader::new(file);
-
-    let replace_question = |current_question: &mut Option<(QuestionType, String, Vec<String>)>,
-                            new_question,
-                            questions: &mut Vec<Question>,
-                            errors: &mut Vec<String>| {
-        if let Some((question_type, connection, clues)) = current_question.take() {
-            if clues.len() == 4 {
-                questions.push(Question {
-                    question_type,
-                    connection,
-                    clues: QuestionClues::TextClues(clues),
-                });
-            } else {
-                errors.push(format!(
-                    "Incorrect number of prompts for connection: {}",
-                    connection
-                ));
-            }
-        }
-
-        *current_question = new_question;
-    };
-
-    for line in bufreader.lines() {
-        match line {
-            Ok(l) => {
-                if let Some(q) = l.strip_prefix("sequence: ") {
-                    replace_question(
-                        &mut current_question,
-                        Some((QuestionType::Sequence, q.to_string(), Vec::new())),
-                        &mut questions,
-                        &mut errors,
-                    );
-                } else if let Some(q) = l.strip_prefix("connection: ") {
-                    replace_question(
-                        &mut current_question,
-                        Some((QuestionType::Connection, q.to_string(), Vec::new())),
-                        &mut questions,
-                        &mut errors,
-                    );
-                } else if let Some(p) = l.strip_prefix("    ") {
-                    if let Some((_, _, ref mut clues)) = current_question {
-                        clues.push(p.into());
-                    } else {
-                        errors.push(format!("Clue {} doesn't belong to a question", p));
-                    }
-                } else {
-                    errors.push(format!("{} is neither a question nor a clue", l));
-                }
-            }
-            Err(e) => {
-                errors.push(e.to_string());
-            }
-        }
-    }
-
-    // close the last question
-    replace_question(&mut current_question, None, &mut questions, &mut errors);
-
-    if !errors.is_empty() {
-        Err(errors)
-    } else {
-        Ok(questions)
-    }
-}
-
-#[derive(Debug)]
-struct Question {
-    question_type: QuestionType,
-    connection: String,
-    clues: QuestionClues,
-}
-
-#[derive(Debug)]
-enum QuestionType {
-    Sequence,
-    Connection,
-}
-
-#[derive(Debug)]
-enum QuestionClues {
-    TextClues(Vec<String>),
-    // PictureClues([;4]),
-    // MusicClues([;4]),
-}
+// #[derive(Debug, Copy, Clone)]
+// struct QuestionState {
+//     start_time: Instant,
+//     clues_shown: usize,
+// }
 
 #[derive(Debug)]
 struct Metrics {
+    width: u32,
+    height: u32,
     tile_size: (u32, u32),
     tile_0_pos: (u32, u32),
     tile_x_stride: u32,
     padding: u32,
     answer_size: (u32, u32),
     answer_pos: (u32, u32),
+    progress_bar_y: i32,
+    progress_bar_height: u32,
     text_size: u16,
 }
 
@@ -417,7 +1048,12 @@ impl Metrics {
 
         let padding = tile_height / 6;
 
+        let progress_bar_height = tile_height / 4;
+        let progress_bar_y = (tile_ypos - progress_bar_height - tile_spacing) as i32;
+
         Metrics {
+            width,
+            height,
             tile_size: (tile_width, tile_height),
             tile_0_pos: (margin, tile_ypos),
             tile_x_stride: tile_width + tile_spacing,
@@ -425,7 +1061,41 @@ impl Metrics {
             answer_pos: (margin, answer_ypos),
             text_size,
             padding,
+            progress_bar_y,
+            progress_bar_height,
         }
+    }
+
+    fn get_tile_dest_rect(&self, index: usize) -> Rect {
+        let x = (self.tile_0_pos.0 + self.tile_x_stride * index as u32) as i32;
+        let y = self.tile_0_pos.1 as i32;
+        let width = self.tile_size.0;
+        let height = self.tile_size.1;
+        Rect::new(x, y, width, height)
+    }
+
+    fn get_answer_dest_rect(&self) -> Rect {
+        Rect::new(
+            self.answer_pos.0 as i32,
+            self.answer_pos.1 as i32,
+            self.answer_size.0,
+            self.answer_size.1,
+        )
+    }
+
+    fn get_progress_bar_dest_rect(&self, index: usize) -> Rect {
+        let x = (self.tile_0_pos.0 + self.tile_x_stride * index as u32) as i32;
+        let y = self.progress_bar_y;
+        let width = self.tile_size.0;
+        let height = self.progress_bar_height;
+        Rect::new(x, y, width, height)
+    }
+
+    fn get_progress_bar_fill_dest_rect(&self, index: usize, fraction: f32) -> Rect {
+        let mut rect = self.get_progress_bar_dest_rect(index);
+        let new_width = (rect.width() as f32 * fraction).round() as u32;
+        rect.set_width(new_width);
+        rect
     }
 }
 
@@ -436,6 +1106,7 @@ fn render_text<'a>(
     width: u32,
     height: u32,
     padding: u32,
+    colour: Color,
 ) -> Result<Surface<'a>, String> {
     let text_width = width - 2 * padding;
     let splits = split_text(text, font, text_width);
@@ -446,7 +1117,7 @@ fn render_text<'a>(
     let y_start = (height as i32 - text_height) / 2;
 
     for (i, text_line) in splits.into_iter().enumerate() {
-        let rendered_line = match font.render(text_line).blended(TEXT_COLOUR) {
+        let rendered_line = match font.render(text_line).blended(colour) {
             Ok(s) => s,
             Err(sdl2::ttf::FontError::InvalidLatin1Text(_)) => unreachable!(),
             Err(sdl2::ttf::FontError::SdlError(s)) => return Err(s),

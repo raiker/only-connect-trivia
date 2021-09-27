@@ -9,6 +9,9 @@ edition = "2018"
 winapi = {version = "0.3", features = ["winuser"] }
 regex = "1"
 lazy_static = "1"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.8"
+rand = "0.8"
 
 [dependencies.sdl2]
 version = "0.34"
