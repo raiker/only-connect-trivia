@@ -1,0 +1,56 @@
+Medium Connections
+    connection: Sand _____
+        storm
+        castle
+        paper
+        wich
+    connection: Words for water
+        ilma
+        mizu
+        вода́
+        eau
+    connection: Jane Eyre characters
+        Mr Brocklehurst
+        Bertha Mason
+        Edward Rochester
+        Jane
+    connection: Impressionists
+        Cézanne
+        Renoir
+        Manet
+        Monet
+    connection: Rock climbing terms
+        Flag
+        Smear
+        Layback
+        Jug
+    connection: Bridgerton characters
+        Portia
+        Simon
+        Siena
+        Daphne
+    connection: 1970s home video game consoles
+        Magnavox Odyssey
+        APF Imagination Machine
+        Bandai Super Vision 8000
+        Atari 2600
+    connection: Bill Murray
+        Space Jam
+        The Grand Budapest Hotel
+        Charlie's Angels
+        Garfield: The Movie
+    connection: Neil Gaiman novels
+        Coraline
+        Stardust
+        Neverwhere
+        American Gods
+    connection: Toilet _____
+        Brush
+        Spray
+        Seat
+        Paper
+    connection: Elements named after them
+        Einstein
+        Rutherford
+        The sun
+        Germany

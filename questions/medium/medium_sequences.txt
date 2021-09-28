@@ -1,0 +1,46 @@
+Medium Sequences
+    sequence: Disney princesses
+        Snow White (1937)
+        Cinderella (1950)
+        Aurora (1959)
+        Ariel (1989)
+    sequence: Natural enemies after Groundskeeper Willie
+        Englishmen and Scots
+        Welshmen and Scots
+        Japanese and Scots
+        Scots and other Scots
+    sequence: Living birds by wingspan
+        Dalmatian Pelican
+        Southern Royal Albatross
+        Great White Pelican
+        Wandering Albatross
+    sequence: Most women's tennis Grand Slam wins
+        Martina Navratilova
+        Chris Evert
+        Steffi Graf
+        Serena Williams
+    sequence: Kokomo - The Beach Boys
+        Aruba
+        Jamaica
+        Bermuda
+        Bahama
+    sequence: Android Versions
+        Ice Cream Sandwich
+        Jellybean
+        KitKat
+        Lollipop
+    sequence: Tallest mountain by continent
+        Kilimanjaro
+        Denali
+        Aconcagua
+        Everest
+    sequence: Canadian provinces by total area
+        Ontario
+        Northwest Territories
+        Quebec
+        Nunavut
+    sequence: Closest countries to Australia
+        France
+        Timor-Leste
+        Indonesia
+        Papua New Guinea

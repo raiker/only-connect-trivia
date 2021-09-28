@@ -1,0 +1,36 @@
+Easy Sequences
+    sequence: Recent Popes
+        IOANNES PAVLVS I
+        IOANNES PAVLVS II
+        BENEDICTVS XVI
+        FRANCISCVS
+    sequence: Countries by area
+        United States
+        China
+        Canada
+        Russia
+    sequence: N^N
+        256
+        27
+        4
+        1
+    sequence: Vertebrae
+        Cervical
+        Thoracic
+        Lumbar
+        Sacral
+    sequence: Whales by mass
+        Sperm
+        Fin
+        Right
+        Blue
+    sequence: Most recent UN member states
+        Switzerland
+        Timor-Leste
+        Montenegro
+        South Sudan
+    sequence: Dead Starks
+        Rickon
+        Catelyn
+        Robb
+        Ned

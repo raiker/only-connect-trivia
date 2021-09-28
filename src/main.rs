@@ -516,7 +516,7 @@ pub fn main() {
         .window("Only Connect Trivia", 1280, 720)
         .position_centered()
         .allow_highdpi()
-        .fullscreen_desktop()
+        // .fullscreen_desktop()
         .build()
         .unwrap();
 
@@ -536,27 +536,27 @@ pub fn main() {
 
     let texture_creator = canvas.texture_creator();
 
-    let mut tile_textures: Vec<Texture> = (0..4)
-        .map(|_| {
-            let mut tex = texture_creator
-                .create_texture_target(
-                    sdl2::pixels::PixelFormatEnum::RGBA8888,
-                    metrics.tile_size.0,
-                    metrics.tile_size.1,
-                )
-                .unwrap();
-            tex.set_blend_mode(sdl2::render::BlendMode::Blend);
-            tex
-        })
-        .collect();
-    let mut answer_texture: Texture = texture_creator
-        .create_texture_target(
-            sdl2::pixels::PixelFormatEnum::RGBA8888,
-            metrics.answer_size.0,
-            metrics.answer_size.1,
-        )
-        .unwrap();
-    answer_texture.set_blend_mode(sdl2::render::BlendMode::Blend);
+    // let mut tile_textures: Vec<Texture> = (0..4)
+    //     .map(|_| {
+    //         let mut tex = texture_creator
+    //             .create_texture_target(
+    //                 sdl2::pixels::PixelFormatEnum::ARGB8888,
+    //                 metrics.tile_size.0,
+    //                 metrics.tile_size.1,
+    //             )
+    //             .unwrap();
+    //         tex.set_blend_mode(sdl2::render::BlendMode::Blend);
+    //         tex
+    //     })
+    //     .collect();
+    // let mut answer_texture: Texture = texture_creator
+    //     .create_texture_target(
+    //         sdl2::pixels::PixelFormatEnum::ARGB8888,
+    //         metrics.answer_size.0,
+    //         metrics.answer_size.1,
+    //     )
+    //     .unwrap();
+    // answer_texture.set_blend_mode(sdl2::render::BlendMode::Blend);
 
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
@@ -1154,17 +1154,52 @@ lazy_static! {
     static ref WORD_END_REGEX: Regex = Regex::new("[^ ](?:$| )").unwrap();
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum PrevChar {
+    NoChar,
+    Space,
+    NotSpace,
+}
+
 // greedy algorithm
 fn split_text<'a>(text: &'a str, font: &Font, width: u32) -> Vec<&'a str> {
     // find indices of word starts and word ends
-    let word_starts = WORD_START_REGEX
-        .find_iter(text)
-        .map(|m| m.end() - 1)
-        .collect::<Vec<_>>();
-    let word_ends = WORD_END_REGEX
-        .find_iter(text)
-        .map(|m| m.start() + 1)
-        .collect::<Vec<_>>();
+    // let word_starts = WORD_START_REGEX
+    //     .find_iter(text)
+    //     .map(|m| m.end() - 1)
+    //     .collect::<Vec<_>>();
+    // let word_ends = WORD_END_REGEX
+    //     .find_iter(text)
+    //     .map(|m| m.start() + 1)
+    //     .collect::<Vec<_>>();
+
+    let mut word_starts = vec![];
+    let mut word_ends = vec![];
+
+    let mut prev = PrevChar::NoChar;
+
+    for (i, c) in text.char_indices() {
+        match prev {
+            PrevChar::NoChar | PrevChar::Space =>
+                if c != ' ' {
+                    word_starts.push(i);
+                }
+            PrevChar::NotSpace =>
+                if c == ' ' {
+                    word_ends.push(i);
+                }
+        }
+
+        if c == ' ' {
+            prev = PrevChar::Space;
+        } else {
+            prev = PrevChar::NotSpace
+        }
+    }
+
+    if prev == PrevChar::NotSpace {
+        word_ends.push(text.len());
+    }
 
     assert_eq!(word_starts.len(), word_ends.len());
 

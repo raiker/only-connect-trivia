@@ -1,4 +1,6 @@
-include_shuffle: ./warmup.txt
-include_shuffle: ./questions/easy_mix_20/easy_mix_20.txt
-# include_shuffle: ./medium_mix_20.txt
-# include_shuffle: ./hard_mix_20.txt
+include_shuffle: ./questions/easy/easy_connections.txt
+include_shuffle: ./questions/easy/easy_sequences.txt
+include_shuffle: ./questions/medium/medium_connections.txt
+include_shuffle: ./questions/medium/medium_sequences.txt
+include_shuffle: ./questions/hard/hard_connections.txt
+include_shuffle: ./questions/hard/hard_sequences.txt

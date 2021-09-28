@@ -1,0 +1,56 @@
+Easy Connections
+    connection: _____ book
+        cheque
+        scrap
+        work
+        note
+    connection: _____ gum
+        blue
+        snow
+        grey
+        flowering
+    connection: Skateboarding tricks
+        Pop shove-it
+        Grind
+        Ollie
+        Kickflip
+    connection: Things named after John Monash
+        A high school
+        A municipality
+        A university
+        A freeway
+    connection: Taylor Swift number 1 Australian singles
+        Look What You Made Me Do
+        Cardigan
+        Bad Blood
+        Shake It Off
+    connection: DoTA 2 Heroes
+        Oracle
+        Spectre
+        Doom
+        Enigma
+    connection: Winners of Golden Raspberry for Worst Picture
+        Jack and Jill
+        Cats
+        Fifty Shades of Grey
+        Catwoman
+    connection: Potatoes
+        Kestrel
+        Yukon Gold
+        Dutch Cream
+        Kipfler
+    connection: NZ supermarket chains
+        Countdown
+        Foursquare
+        Pak'nSave
+        New World
+    connection: Battles of the Western Front (WW1)
+        Marne
+        Somme
+        Verdun
+        Ypres
+    connection: Britney Spears songs
+        Lucky
+        Circus
+        Stronger
+        Toxic

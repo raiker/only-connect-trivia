@@ -1,0 +1,16 @@
+Hard Connections
+    connection: Anagrams of countries
+        regalia
+        panel
+        also
+        rain
+    connection: Map projections
+        Boggs eumorphic
+        Gall–Peters
+        Equirectangular
+        Mercator
+    connection: Countries without A, E or I
+        Togo
+        Cyprus
+        Comoros
+        Morocco
