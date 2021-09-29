@@ -1,7 +1,7 @@
 Hard Sequences
     sequence: Summer Olympic host countries
-        1: e.g. China
-        2: Australia, Greece, Germany, Japan, France
+        1: e.g. China, Netherlands, Brazil
+        2: e.g. Australia, Greece, France
         3: UK
         4: US
     sequence: Stans by population
@@ -10,7 +10,7 @@ Hard Sequences
         Uzbekistan
         Pakistan
     sequence: Men's marathon record holders
-        Patrick Makau, Kenya
-        Wilson Kipsang, Kenya
-        Dennis Kimetto, Kenya
-        Eliud Kipchoge, Kenya
+        Patrick Makau (Kenya)
+        Wilson Kipsang (Kenya)
+        Dennis Kimetto (Kenya)
+        Eliud Kipchoge (Kenya)
