@@ -550,28 +550,6 @@ pub fn main() {
 
     let texture_creator = canvas.texture_creator();
 
-    // let mut tile_textures: Vec<Texture> = (0..4)
-    //     .map(|_| {
-    //         let mut tex = texture_creator
-    //             .create_texture_target(
-    //                 sdl2::pixels::PixelFormatEnum::ARGB8888,
-    //                 metrics.tile_size.0,
-    //                 metrics.tile_size.1,
-    //             )
-    //             .unwrap();
-    //         tex.set_blend_mode(sdl2::render::BlendMode::Blend);
-    //         tex
-    //     })
-    //     .collect();
-    // let mut answer_texture: Texture = texture_creator
-    //     .create_texture_target(
-    //         sdl2::pixels::PixelFormatEnum::ARGB8888,
-    //         metrics.answer_size.0,
-    //         metrics.answer_size.1,
-    //     )
-    //     .unwrap();
-    // answer_texture.set_blend_mode(sdl2::render::BlendMode::Blend);
-
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
         let mut input = KeyboardInput::default();
@@ -874,86 +852,6 @@ pub fn main() {
     }
 }
 
-// struct GameState {
-//     red_score: i32,
-//     blue_score: i32,
-//     is_red_turn: bool,
-//     questions: Vec<QuestionSet>,
-//     time_per_question: Duration,
-//     phase_state: GamePhaseState,
-// }
-
-// impl GameState {
-//     /// Should be called each frame. Checks timers and keyboard input
-//     pub fn update(&mut self, input: KeyboardInput) {
-//         let now = Instant::now();
-
-//         match self.phase_state {
-//             GamePhaseState::StartPage => {
-//                 if input.next {
-//                     if self.questions.is_empty() {
-//                         self.phase_state = GamePhaseState::EndPage;
-//                     } else {
-//                         self.phase_state = GamePhaseState::TitlePage {
-//                             current_set: 0
-//                         };
-//                     }
-//                 }
-//             }
-//             GamePhaseState::TitlePage {
-//                 ref mut current_set,
-//             } => {
-//                 if input.next {
-//                     if self.questions[*current_set].questions.is_empty() {
-//                         if current_set + 1 < self.questions.len() {
-
-//                         }
-//                     }
-//                 }
-//             },
-//             GamePhaseState::Questions {
-//                 ref mut current_question,
-//                 ref mut question_state,
-//             } => {
-//                 if question_state.clues_shown < 5 {
-//                     question_state.clues_shown += 1;
-//                     false
-//                 } else if *current_question + 1 < self.questions.len() {
-//                     *current_question += 1;
-//                     *question_state = QuestionState {
-//                         start_time: Instant::now(),
-//                         clues_shown: 1,
-//                     };
-//                     true
-//                 } else {
-//                     self.phase_state = GamePhaseState::EndPage;
-//                     false
-//                 }
-//             }
-//             GamePhaseState::EndPage => false,
-//         }
-//     }
-// }
-
-// enum GamePhaseState {
-//     StartPage,
-//     TitlePage {
-//         current_set: usize,
-//     },
-//     Questions {
-//         current_set: usize,
-//         current_question: usize,
-//         question_state: QuestionState,
-//     },
-//     EndPage,
-// }
-
-// #[derive(Debug, Copy, Clone)]
-// struct QuestionState {
-//     start_time: Instant,
-//     clues_shown: usize,
-// }
-
 #[derive(Debug)]
 struct Metrics {
     width: u32,
@@ -1119,11 +1017,6 @@ fn render_text<'a>(
     Ok(output_surface)
 }
 
-lazy_static! {
-    static ref WORD_START_REGEX: Regex = Regex::new("(?:^| )[^ ]").unwrap();
-    static ref WORD_END_REGEX: Regex = Regex::new("[^ ](?:$| )").unwrap();
-}
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum PrevChar {
     NoChar,
@@ -1134,14 +1027,6 @@ enum PrevChar {
 // greedy algorithm
 fn split_text<'a>(text: &'a str, font: &Font, width: u32) -> Vec<&'a str> {
     // find indices of word starts and word ends
-    // let word_starts = WORD_START_REGEX
-    //     .find_iter(text)
-    //     .map(|m| m.end() - 1)
-    //     .collect::<Vec<_>>();
-    // let word_ends = WORD_END_REGEX
-    //     .find_iter(text)
-    //     .map(|m| m.start() + 1)
-    //     .collect::<Vec<_>>();
 
     let mut word_starts = vec![];
     let mut word_ends = vec![];
