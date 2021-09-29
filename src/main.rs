@@ -56,6 +56,9 @@ trait QuestionPhase: Debug {
     fn is_progress_bar_shown(&self) -> bool;
     fn is_count_in(&self) -> bool;
     fn is_first_team_guess(&self) -> bool;
+    /// whether clue 4 should be replaced with a question mark
+    fn is_clue_4_question_mark(&self) -> bool;
+    fn progress_bar_position(&self) -> usize;
 }
 
 #[derive(Debug)]
@@ -174,6 +177,14 @@ impl QuestionPhase for ConnectionPhase {
             | ConnectionPhase::AnswerShown => false,
         }
     }
+
+    fn is_clue_4_question_mark(&self) -> bool {
+        false
+    }
+
+    fn progress_bar_position(&self) -> usize {
+        self.clues_to_show() - 1
+    }
 }
 
 #[derive(Debug)]
@@ -251,8 +262,8 @@ impl QuestionPhase for SequencePhase {
             SequencePhase::CountIn => 0,
             SequencePhase::OneClueShown => 1,
             SequencePhase::TwoCluesShown => 2,
-            SequencePhase::ThreeCluesShown => 3,
-            SequencePhase::PassedOver => 3,
+            SequencePhase::ThreeCluesShown => 4, // including the question mark
+            SequencePhase::PassedOver => 4,      // including the question mark
             SequencePhase::AnswerShown => 4,
         }
     }
@@ -261,8 +272,9 @@ impl QuestionPhase for SequencePhase {
         match self {
             SequencePhase::OneClueShown
             | SequencePhase::TwoCluesShown
-            | SequencePhase::ThreeCluesShown => true,
-            SequencePhase::CountIn | SequencePhase::PassedOver | SequencePhase::AnswerShown => {
+            | SequencePhase::ThreeCluesShown
+            | SequencePhase::PassedOver => true,
+            SequencePhase::CountIn | SequencePhase::AnswerShown => {
                 false
             }
         }
@@ -284,6 +296,25 @@ impl QuestionPhase for SequencePhase {
             SequencePhase::CountIn | SequencePhase::PassedOver | SequencePhase::AnswerShown => {
                 false
             }
+        }
+    }
+
+    fn is_clue_4_question_mark(&self) -> bool {
+        if let SequencePhase::AnswerShown = self {
+            false
+        } else {
+            true
+        }
+    }
+
+    fn progress_bar_position(&self) -> usize {
+        match self {
+            SequencePhase::CountIn => 0,
+            SequencePhase::OneClueShown => 0,
+            SequencePhase::TwoCluesShown => 1,
+            SequencePhase::ThreeCluesShown => 2, // including the question mark
+            SequencePhase::PassedOver => 3,      // including the question mark
+            SequencePhase::AnswerShown => 3,
         }
     }
 }
@@ -656,8 +687,26 @@ pub fn main() {
                     let dst_rect = metrics.get_tile_dest_rect(i);
                     canvas.set_draw_color(TILE_BACKGROUND_COLOUR);
                     canvas.fill_rect(dst_rect).unwrap();
-                    match clues {
-                        QuestionClues::TextClues(clues) => {
+
+                    let override_question_mark = (i == 3) && phase.is_clue_4_question_mark();
+
+                    let clue_texture = match (override_question_mark, clues) {
+                        (true, _) => {
+                            let text_surface = render_text(
+                                "?",
+                                &font,
+                                metrics.tile_size.0,
+                                metrics.tile_size.1,
+                                metrics.padding,
+                                TILE_TEXT_COLOUR,
+                            )
+                            .unwrap();
+
+                            texture_creator
+                                .create_texture_from_surface(text_surface)
+                                .unwrap()
+                        }
+                        (false, QuestionClues::TextClues(clues)) => {
                             let text_surface = render_text(
                                 &clues[i],
                                 &font,
@@ -668,13 +717,12 @@ pub fn main() {
                             )
                             .unwrap();
 
-                            let text_texture = texture_creator
+                            texture_creator
                                 .create_texture_from_surface(text_surface)
-                                .unwrap();
-
-                            canvas.copy(&text_texture, None, dst_rect).unwrap();
+                                .unwrap()
                         }
-                    }
+                    };
+                    canvas.copy(&clue_texture, None, dst_rect).unwrap();
                 }
                 if phase.is_answer_shown() {
                     let dst_rect = metrics.get_answer_dest_rect();
@@ -702,12 +750,10 @@ pub fn main() {
                     let fraction_time_elapsed = time_elapsed.div_duration_f32(TIME_PER_QUESTION);
                     let progress_bar_fraction = fraction_time_elapsed.clamp(0.0, 1.0);
 
-                    let last_tile_shown_index = phase.clues_to_show() - 1;
-
                     let background_dst_rect =
-                        metrics.get_progress_bar_dest_rect(last_tile_shown_index);
+                        metrics.get_progress_bar_dest_rect(phase.progress_bar_position());
                     let fill_dst_rect = metrics.get_progress_bar_fill_dest_rect(
-                        last_tile_shown_index,
+                        phase.progress_bar_position(),
                         progress_bar_fraction,
                     );
 
@@ -765,9 +811,12 @@ pub fn main() {
                             .unwrap();
                     }
                 } else if let None = stopped {
-                    if let Some(remaining_time) = (*started + TIME_PER_QUESTION).checked_duration_since(Instant::now()) {
+                    if let Some(remaining_time) =
+                        (*started + TIME_PER_QUESTION).checked_duration_since(Instant::now())
+                    {
                         if remaining_time < COUNTDOWN_TIME {
-                            let countdown_text = (remaining_time.as_secs_f32().ceil() as u32).to_string();
+                            let countdown_text =
+                                (remaining_time.as_secs_f32().ceil() as u32).to_string();
                             let text_surface = render_text(
                                 &countdown_text,
                                 &font,
