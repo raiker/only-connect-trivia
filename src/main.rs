@@ -12,6 +12,7 @@ use sdl2::render::Texture;
 use sdl2::surface::Surface;
 use sdl2::ttf::Font;
 use std::{
+    fmt::Debug,
     ops::Generator,
     ops::GeneratorState,
     pin::Pin,
@@ -34,6 +35,8 @@ const BLUE_SCORE_TILE_COLOUR: Color = Color::RGB(0x66, 0x66, 0xff);
 const SCORE_TILE_TEXT_COLOUR: Color = Color::RGB(0xff, 0xff, 0xff);
 
 const TIME_PER_QUESTION: Duration = Duration::from_secs(45);
+const COUNT_IN_TIME: Duration = Duration::from_secs(3);
+const COUNTDOWN_TIME: Duration = Duration::from_secs(5);
 
 #[derive(Debug)]
 enum BackgroundColour {
@@ -42,8 +45,22 @@ enum BackgroundColour {
     Grey,
 }
 
+trait QuestionPhase: Debug {
+    fn get_points(&self) -> i32;
+    fn pass_over(&mut self);
+    fn show_answer(&mut self);
+    fn next(&mut self);
+    fn is_passed_over(&self) -> bool;
+    fn is_answer_shown(&self) -> bool;
+    fn clues_to_show(&self) -> usize;
+    fn is_progress_bar_shown(&self) -> bool;
+    fn is_count_in(&self) -> bool;
+    fn is_first_team_guess(&self) -> bool;
+}
+
 #[derive(Debug)]
 enum ConnectionPhase {
+    CountIn,
     OneClueShown,
     TwoCluesShown,
     ThreeCluesShown,
@@ -52,9 +69,10 @@ enum ConnectionPhase {
     AnswerShown,
 }
 
-impl ConnectionPhase {
-    pub fn get_points(&self) -> i32 {
+impl QuestionPhase for ConnectionPhase {
+    fn get_points(&self) -> i32 {
         match self {
+            ConnectionPhase::CountIn => unreachable!(),
             ConnectionPhase::OneClueShown => 5,
             ConnectionPhase::TwoCluesShown => 3,
             ConnectionPhase::ThreeCluesShown => 2,
@@ -64,29 +82,32 @@ impl ConnectionPhase {
         }
     }
 
-    pub fn pass_over(&mut self) {
+    fn pass_over(&mut self) {
         match self {
             ConnectionPhase::OneClueShown
             | ConnectionPhase::TwoCluesShown
             | ConnectionPhase::ThreeCluesShown
             | ConnectionPhase::FourCluesShown => *self = ConnectionPhase::PassedOver,
-            ConnectionPhase::PassedOver | ConnectionPhase::AnswerShown => unreachable!(),
+            ConnectionPhase::CountIn
+            | ConnectionPhase::PassedOver
+            | ConnectionPhase::AnswerShown => unreachable!(),
         }
     }
 
-    pub fn show_answer(&mut self) {
+    fn show_answer(&mut self) {
         match self {
             ConnectionPhase::OneClueShown
             | ConnectionPhase::TwoCluesShown
             | ConnectionPhase::ThreeCluesShown
             | ConnectionPhase::FourCluesShown
             | ConnectionPhase::PassedOver => *self = ConnectionPhase::AnswerShown,
-            ConnectionPhase::AnswerShown => unreachable!(),
+            ConnectionPhase::CountIn | ConnectionPhase::AnswerShown => unreachable!(),
         }
     }
 
-    pub fn next(&mut self) {
+    fn next(&mut self) {
         match self {
+            ConnectionPhase::CountIn => *self = ConnectionPhase::OneClueShown,
             ConnectionPhase::OneClueShown => *self = ConnectionPhase::TwoCluesShown,
             ConnectionPhase::TwoCluesShown => *self = ConnectionPhase::ThreeCluesShown,
             ConnectionPhase::ThreeCluesShown => *self = ConnectionPhase::FourCluesShown,
@@ -95,7 +116,7 @@ impl ConnectionPhase {
         }
     }
 
-    pub fn is_passed_over(&self) -> bool {
+    fn is_passed_over(&self) -> bool {
         if let ConnectionPhase::PassedOver = self {
             true
         } else {
@@ -103,7 +124,7 @@ impl ConnectionPhase {
         }
     }
 
-    pub fn is_answer_shown(&self) -> bool {
+    fn is_answer_shown(&self) -> bool {
         if let ConnectionPhase::AnswerShown = self {
             true
         } else {
@@ -111,8 +132,9 @@ impl ConnectionPhase {
         }
     }
 
-    pub fn clues_to_show(&self) -> usize {
+    fn clues_to_show(&self) -> usize {
         match self {
+            ConnectionPhase::CountIn => 0,
             ConnectionPhase::OneClueShown => 1,
             ConnectionPhase::TwoCluesShown => 2,
             ConnectionPhase::ThreeCluesShown => 3,
@@ -122,20 +144,41 @@ impl ConnectionPhase {
         }
     }
 
-    pub fn is_progress_bar_shown(&self) -> bool {
+    fn is_progress_bar_shown(&self) -> bool {
         match self {
             ConnectionPhase::OneClueShown
             | ConnectionPhase::TwoCluesShown
             | ConnectionPhase::ThreeCluesShown
             | ConnectionPhase::FourCluesShown
             | ConnectionPhase::PassedOver => true,
-            ConnectionPhase::AnswerShown => false,
+            ConnectionPhase::CountIn | ConnectionPhase::AnswerShown => false,
+        }
+    }
+
+    fn is_count_in(&self) -> bool {
+        if let ConnectionPhase::CountIn = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    fn is_first_team_guess(&self) -> bool {
+        match self {
+            ConnectionPhase::OneClueShown
+            | ConnectionPhase::TwoCluesShown
+            | ConnectionPhase::ThreeCluesShown
+            | ConnectionPhase::FourCluesShown => true,
+            ConnectionPhase::CountIn
+            | ConnectionPhase::PassedOver
+            | ConnectionPhase::AnswerShown => false,
         }
     }
 }
 
 #[derive(Debug)]
 enum SequencePhase {
+    CountIn,
     OneClueShown,
     TwoCluesShown,
     ThreeCluesShown,
@@ -143,46 +186,51 @@ enum SequencePhase {
     AnswerShown,
 }
 
-impl SequencePhase {
-    pub fn get_points(&self) -> i32 {
+impl QuestionPhase for SequencePhase {
+    fn get_points(&self) -> i32 {
         match self {
             SequencePhase::OneClueShown => 5,
             SequencePhase::TwoCluesShown => 3,
             SequencePhase::ThreeCluesShown => 2,
             SequencePhase::PassedOver => 1,
-            SequencePhase::AnswerShown => unreachable!(),
+            SequencePhase::CountIn | SequencePhase::AnswerShown => unreachable!(),
         }
     }
 
-    pub fn pass_over(&mut self) {
+    fn pass_over(&mut self) {
         match self {
             SequencePhase::OneClueShown
             | SequencePhase::TwoCluesShown
             | SequencePhase::ThreeCluesShown => *self = SequencePhase::PassedOver,
-            SequencePhase::PassedOver | SequencePhase::AnswerShown => unreachable!(),
+            SequencePhase::CountIn | SequencePhase::PassedOver | SequencePhase::AnswerShown => {
+                unreachable!()
+            }
         }
     }
 
-    pub fn show_answer(&mut self) {
+    fn show_answer(&mut self) {
         match self {
             SequencePhase::OneClueShown
             | SequencePhase::TwoCluesShown
             | SequencePhase::ThreeCluesShown
             | SequencePhase::PassedOver => *self = SequencePhase::AnswerShown,
-            SequencePhase::AnswerShown => unreachable!(),
+            SequencePhase::CountIn | SequencePhase::AnswerShown => unreachable!(),
         }
     }
 
-    pub fn next(&mut self) {
+    fn next(&mut self) {
         match self {
+            SequencePhase::CountIn => *self = SequencePhase::OneClueShown,
             SequencePhase::OneClueShown => *self = SequencePhase::TwoCluesShown,
             SequencePhase::TwoCluesShown => *self = SequencePhase::ThreeCluesShown,
             SequencePhase::ThreeCluesShown => *self = SequencePhase::ThreeCluesShown,
-            SequencePhase::PassedOver | SequencePhase::AnswerShown => unreachable!(),
+            SequencePhase::PassedOver | SequencePhase::AnswerShown => {
+                unreachable!()
+            }
         }
     }
 
-    pub fn is_passed_over(&self) -> bool {
+    fn is_passed_over(&self) -> bool {
         if let SequencePhase::PassedOver = self {
             true
         } else {
@@ -190,7 +238,7 @@ impl SequencePhase {
         }
     }
 
-    pub fn is_answer_shown(&self) -> bool {
+    fn is_answer_shown(&self) -> bool {
         if let SequencePhase::AnswerShown = self {
             true
         } else {
@@ -198,8 +246,9 @@ impl SequencePhase {
         }
     }
 
-    pub fn clues_to_show(&self) -> usize {
+    fn clues_to_show(&self) -> usize {
         match self {
+            SequencePhase::CountIn => 0,
             SequencePhase::OneClueShown => 1,
             SequencePhase::TwoCluesShown => 2,
             SequencePhase::ThreeCluesShown => 3,
@@ -208,76 +257,33 @@ impl SequencePhase {
         }
     }
 
-    pub fn is_progress_bar_shown(&self) -> bool {
+    fn is_progress_bar_shown(&self) -> bool {
         match self {
             SequencePhase::OneClueShown
             | SequencePhase::TwoCluesShown
             | SequencePhase::ThreeCluesShown => true,
-            SequencePhase::PassedOver | SequencePhase::AnswerShown => false,
-        }
-    }
-}
-
-#[derive(Debug)]
-enum QuestionPhase {
-    Connection(ConnectionPhase),
-    Sequence(SequencePhase),
-}
-
-impl QuestionPhase {
-    pub fn get_points(&self) -> i32 {
-        match self {
-            QuestionPhase::Connection(p) => p.get_points(),
-            QuestionPhase::Sequence(p) => p.get_points(),
+            SequencePhase::CountIn | SequencePhase::PassedOver | SequencePhase::AnswerShown => {
+                false
+            }
         }
     }
 
-    pub fn pass_over(&mut self) {
-        match self {
-            QuestionPhase::Connection(p) => p.pass_over(),
-            QuestionPhase::Sequence(p) => p.pass_over(),
+    fn is_count_in(&self) -> bool {
+        if let SequencePhase::CountIn = self {
+            true
+        } else {
+            false
         }
     }
 
-    pub fn show_answer(&mut self) {
+    fn is_first_team_guess(&self) -> bool {
         match self {
-            QuestionPhase::Connection(p) => p.show_answer(),
-            QuestionPhase::Sequence(p) => p.show_answer(),
-        }
-    }
-
-    pub fn next(&mut self) {
-        match self {
-            QuestionPhase::Connection(p) => p.next(),
-            QuestionPhase::Sequence(p) => p.next(),
-        }
-    }
-
-    pub fn is_passed_over(&self) -> bool {
-        match self {
-            QuestionPhase::Connection(p) => p.is_passed_over(),
-            QuestionPhase::Sequence(p) => p.is_passed_over(),
-        }
-    }
-
-    pub fn is_answer_shown(&self) -> bool {
-        match self {
-            QuestionPhase::Connection(p) => p.is_answer_shown(),
-            QuestionPhase::Sequence(p) => p.is_answer_shown(),
-        }
-    }
-
-    pub fn clues_to_show(&self) -> usize {
-        match self {
-            QuestionPhase::Connection(p) => p.clues_to_show(),
-            QuestionPhase::Sequence(p) => p.clues_to_show(),
-        }
-    }
-
-    pub fn is_progress_bar_shown(&self) -> bool {
-        match self {
-            QuestionPhase::Connection(p) => p.is_progress_bar_shown(),
-            QuestionPhase::Sequence(p) => p.is_progress_bar_shown(),
+            SequencePhase::OneClueShown
+            | SequencePhase::TwoCluesShown
+            | SequencePhase::ThreeCluesShown => true,
+            SequencePhase::CountIn | SequencePhase::PassedOver | SequencePhase::AnswerShown => {
+                false
+            }
         }
     }
 }
@@ -299,7 +305,7 @@ enum QuestionState {
     Question {
         clues: QuestionClues,
         connection: String,
-        phase: QuestionPhase,
+        phase: Box<dyn QuestionPhase>,
         offered_to_red: bool, // question initially given to red team
         started: Instant,
         stopped: Option<Instant>,
@@ -366,7 +372,12 @@ impl QuestionState {
                 offered_to_red,
                 ..
             } => {
-                if phase.is_answer_shown() {
+                if phase.is_count_in() {
+                    if *started <= Instant::now() {
+                        phase.next();
+                    }
+                    UpdateResult::no_change()
+                } else if phase.is_answer_shown() {
                     if input.next {
                         UpdateResult::next_question()
                     } else {
@@ -481,9 +492,9 @@ pub fn main() {
                         yield QuestionState::Question {
                             clues: q.clues,
                             connection: q.connection,
-                            phase: QuestionPhase::Connection(ConnectionPhase::OneClueShown),
+                            phase: Box::new(ConnectionPhase::CountIn),
                             offered_to_red: team_is_red,
-                            started: Instant::now(),
+                            started: Instant::now() + COUNT_IN_TIME,
                             stopped: None,
                         }
                     }
@@ -491,9 +502,9 @@ pub fn main() {
                         yield QuestionState::Question {
                             clues: q.clues,
                             connection: q.connection,
-                            phase: QuestionPhase::Sequence(SequencePhase::OneClueShown),
+                            phase: Box::new(SequencePhase::CountIn),
                             offered_to_red: team_is_red,
-                            started: Instant::now(),
+                            started: Instant::now() + COUNT_IN_TIME,
                             stopped: None,
                         }
                     }
@@ -754,6 +765,51 @@ pub fn main() {
                         .copy(&text_texture, None, background_dst_rect)
                         .unwrap();
                 }
+                if phase.is_count_in() {
+                    if let Some(count_in_time) = started.checked_duration_since(Instant::now()) {
+                        let count_in_text = (count_in_time.as_secs_f32().ceil() as u32).to_string();
+                        let text_surface = render_text(
+                            &count_in_text,
+                            &font,
+                            metrics.countdown_tile_rect.width(),
+                            metrics.countdown_tile_rect.height(),
+                            metrics.padding,
+                            PROGRESS_BAR_TEXT_COLOUR,
+                        )
+                        .unwrap();
+
+                        let text_texture = texture_creator
+                            .create_texture_from_surface(text_surface)
+                            .unwrap();
+
+                        canvas
+                            .copy(&text_texture, None, metrics.countdown_tile_rect)
+                            .unwrap();
+                    }
+                } else if let None = stopped {
+                    if let Some(remaining_time) = (*started + TIME_PER_QUESTION).checked_duration_since(Instant::now()) {
+                        if remaining_time < COUNTDOWN_TIME {
+                            let countdown_text = (remaining_time.as_secs_f32().ceil() as u32).to_string();
+                            let text_surface = render_text(
+                                &countdown_text,
+                                &font,
+                                metrics.countdown_tile_rect.width(),
+                                metrics.countdown_tile_rect.height(),
+                                metrics.padding,
+                                PROGRESS_BAR_TEXT_COLOUR,
+                            )
+                            .unwrap();
+
+                            let text_texture = texture_creator
+                                .create_texture_from_surface(text_surface)
+                                .unwrap();
+
+                            canvas
+                                .copy(&text_texture, None, metrics.countdown_tile_rect)
+                                .unwrap();
+                        }
+                    }
+                }
             }
             QuestionState::EndPage => {
                 let banner_surface = render_text(
@@ -779,8 +835,16 @@ pub fn main() {
             QuestionState::StartPage => {}
             _ => {
                 let score_tiles = [
-                    (metrics.left_score_tile_rect, RED_SCORE_TILE_COLOUR, red_points),
-                    (metrics.right_score_tile_rect, BLUE_SCORE_TILE_COLOUR, blue_points),
+                    (
+                        metrics.left_score_tile_rect,
+                        RED_SCORE_TILE_COLOUR,
+                        red_points,
+                    ),
+                    (
+                        metrics.right_score_tile_rect,
+                        BLUE_SCORE_TILE_COLOUR,
+                        blue_points,
+                    ),
                 ];
 
                 for (rect, colour, points) in score_tiles {
@@ -904,6 +968,7 @@ struct Metrics {
     progress_bar_height: u32,
     left_score_tile_rect: Rect,
     right_score_tile_rect: Rect,
+    countdown_tile_rect: Rect,
     text_size: u16,
 }
 
@@ -939,8 +1004,31 @@ impl Metrics {
         let score_tile_width = tile_width * 2 / 3;
         let score_tile_height = tile_height * 2 / 3;
 
-        let left_score_tile_rect = Rect::new(margin as i32, margin as i32, score_tile_width, score_tile_height);
-        let right_score_tile_rect = Rect::new((width - margin - score_tile_width) as i32, margin as i32, score_tile_width, score_tile_height);
+        let countdown_tile_width = tile_width / 2;
+        let countdown_tile_height = tile_height / 2;
+
+        let countdown_tile_xpos = ((width - countdown_tile_width) / 2) as i32;
+        let countdown_tile_ypos = (2 * padding) as i32;
+
+        let left_score_tile_rect = Rect::new(
+            margin as i32,
+            margin as i32,
+            score_tile_width,
+            score_tile_height,
+        );
+        let right_score_tile_rect = Rect::new(
+            (width - margin - score_tile_width) as i32,
+            margin as i32,
+            score_tile_width,
+            score_tile_height,
+        );
+
+        let countdown_tile_rect = Rect::new(
+            countdown_tile_xpos,
+            countdown_tile_ypos,
+            countdown_tile_width,
+            countdown_tile_height,
+        );
 
         Metrics {
             width,
@@ -955,6 +1043,7 @@ impl Metrics {
             progress_bar_height,
             left_score_tile_rect,
             right_score_tile_rect,
+            countdown_tile_rect,
             text_size,
         }
     }
@@ -1061,14 +1150,16 @@ fn split_text<'a>(text: &'a str, font: &Font, width: u32) -> Vec<&'a str> {
 
     for (i, c) in text.char_indices() {
         match prev {
-            PrevChar::NoChar | PrevChar::Space =>
+            PrevChar::NoChar | PrevChar::Space => {
                 if c != ' ' {
                     word_starts.push(i);
                 }
-            PrevChar::NotSpace =>
+            }
+            PrevChar::NotSpace => {
                 if c == ' ' {
                     word_ends.push(i);
                 }
+            }
         }
 
         if c == ' ' {
