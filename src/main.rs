@@ -29,6 +29,9 @@ const TILE_BACKGROUND_COLOUR: Color = Color::RGB(0x99, 0x99, 0x99);
 const PROGRESS_BAR_BACKGROUND_COLOUR: Color = Color::RGB(0x33, 0x33, 0x33);
 const PROGRESS_BAR_FOREGROUND_COLOUR: Color = Color::RGB(0x99, 0x99, 0x99);
 const PROGRESS_BAR_TEXT_COLOUR: Color = Color::RGB(0xff, 0xff, 0xff);
+const RED_SCORE_TILE_COLOUR: Color = Color::RGB(0x99, 0x66, 0x66);
+const BLUE_SCORE_TILE_COLOUR: Color = Color::RGB(0x66, 0x66, 0xff);
+const SCORE_TILE_TEXT_COLOUR: Color = Color::RGB(0xff, 0xff, 0xff);
 
 const TIME_PER_QUESTION: Duration = Duration::from_secs(45);
 
@@ -768,174 +771,42 @@ pub fn main() {
                     .unwrap();
 
                 canvas.copy(&banner_texture, None, None).unwrap();
-            } // GamePhaseState::Questions {
-              //     current_set,
-              //     current_question, ..
-              // } => {
-              //     let question = &game_state.questions[current_set].questions[current_question];
-
-              //     // Fill the clue tiles
-              //     let textures_vec = tile_textures
-              //         .iter_mut()
-              //         .enumerate()
-              //         .map(|(i, t)| (t, i))
-              //         .collect::<Vec<_>>();
-
-              //     canvas
-              //         .with_multiple_texture_canvas(textures_vec.iter(), |texture_canvas, i| {
-              //             let local_texture_creator = texture_canvas.texture_creator();
-
-              //             texture_canvas.set_draw_color(Color::RGBA(0, 0, 0, 0));
-              //             texture_canvas.clear();
-
-              //             texture_canvas
-              //                 .rounded_box(
-              //                     0,
-              //                     0,
-              //                     metrics.tile_size.0 as i16,
-              //                     metrics.tile_size.1 as i16,
-              //                     metrics.padding as i16,
-              //                     TILE_BACKGROUND_COLOUR,
-              //                 )
-              //                 .unwrap();
-
-              //             texture_canvas.set_draw_color(Color::RGBA(0, 0, 0, 255));
-              //             let content_surface = match question.clues {
-              //                 QuestionClues::TextClues(ref clues) => render_text(
-              //                     &clues[*i],
-              //                     &font,
-              //                     metrics.tile_size.0,
-              //                     metrics.tile_size.1,
-              //                     metrics.padding,
-              //                 )
-              //                 .unwrap(),
-              //                 QuestionClues::PictureClues(ref clues) => {
-              //                     todo!()
-              //                 }
-              //             };
-              //             let content_texture = local_texture_creator
-              //                 .create_texture_from_surface(content_surface)
-              //                 .unwrap();
-
-              //             texture_canvas.copy(&content_texture, None, None).unwrap();
-
-              //             // no need to present, apparently
-              //         })
-              //         .unwrap();
-
-              //     // fill the connection tile
-              //     canvas
-              //         .with_texture_canvas(&mut answer_texture, |texture_canvas| {
-              //             let local_texture_creator = texture_canvas.texture_creator();
-
-              //             texture_canvas.set_draw_color(Color::RGBA(0, 0, 0, 0));
-              //             texture_canvas.clear();
-
-              //             texture_canvas
-              //                 .rounded_box(
-              //                     0,
-              //                     0,
-              //                     metrics.answer_size.0 as i16,
-              //                     metrics.answer_size.1 as i16,
-              //                     metrics.padding as i16,
-              //                     TILE_BACKGROUND_COLOUR,
-              //                 )
-              //                 .unwrap();
-
-              //             let content_surface = render_text(
-              //                 &question.connection,
-              //                 &font,
-              //                 metrics.answer_size.0,
-              //                 metrics.answer_size.1,
-              //                 metrics.padding,
-              //             )
-              //             .unwrap();
-
-              //             let content_texture = local_texture_creator
-              //                 .create_texture_from_surface(content_surface)
-              //                 .unwrap();
-
-              //             texture_canvas.copy(&content_texture, None, None).unwrap();
-              //             // no need to present, apparently
-              //         })
-              //         .unwrap();
-              // }
+            }
         }
-        // }
 
-        // match game_state.phase_state {
-        //     GamePhaseState::StartPage => canvas.string(100, 100, "Start", Color::WHITE).unwrap(),
-        //     GamePhaseState::TitlePage { current_set } => {
-        //         todo!()
-        //     }
-        //     GamePhaseState::Questions {
-        //         question_state,
-        //         current_set,
-        //         current_question,
-        //     } => {
-        //         for i in 0..question_state.clues_shown {
-        //             if i < 4 {
-        //                 let x = (metrics.tile_0_pos.0 + metrics.tile_x_stride * i as u32) as i32;
-        //                 let y = metrics.tile_0_pos.1 as i32;
-        //                 let width = metrics.tile_size.0;
-        //                 let height = metrics.tile_size.1;
-        //                 let dst_rect = Rect::new(x, y, width, height);
+        // render scores on all pages except the start page
+        match question_state {
+            QuestionState::StartPage => {}
+            _ => {
+                let score_tiles = [
+                    (metrics.left_score_tile_rect, RED_SCORE_TILE_COLOUR, red_points),
+                    (metrics.right_score_tile_rect, BLUE_SCORE_TILE_COLOUR, blue_points),
+                ];
 
-        //                 canvas.copy(&tile_textures[i], None, dst_rect).unwrap();
-        //             } else {
-        //                 let dst_rect = Rect::new(
-        //                     metrics.answer_pos.0 as i32,
-        //                     metrics.answer_pos.1 as i32,
-        //                     metrics.answer_size.0,
-        //                     metrics.answer_size.1,
-        //                 );
-        //                 canvas.copy(&answer_texture, None, dst_rect).unwrap();
-        //             }
-        //         }
+                for (rect, colour, points) in score_tiles {
+                    canvas.set_draw_color(colour);
+                    canvas.fill_rect(rect).unwrap();
+                    let points_string = points.to_string();
+                    let text_surface = render_text(
+                        &points_string,
+                        &font,
+                        rect.width(),
+                        rect.height(),
+                        metrics.padding,
+                        SCORE_TILE_TEXT_COLOUR,
+                    )
+                    .unwrap();
 
-        //         let question = &game_state.questions[current_question];
+                    let text_texture = texture_creator
+                        .create_texture_from_surface(text_surface)
+                        .unwrap();
 
-        //         // draw timer
-        //         if question_state.clues_shown < 5 {
-        //             let time_elapsed = Instant::now() - question_state.start_time;
-        //             let fraction_time_elapsed =
-        //                 time_elapsed.div_duration_f32(game_state.time_per_question);
-        //             let progress_bar_fraction = fraction_time_elapsed.clamp(0.0, 1.0);
-
-        //             // draw progress bar background
-        //             canvas
-        //                 .rounded_box(
-        //                     metrics.progress_bar_pos.0 as i16,
-        //                     metrics.progress_bar_pos.1 as i16,
-        //                     (metrics.progress_bar_pos.0 + metrics.progress_bar_size.0) as i16,
-        //                     (metrics.progress_bar_pos.1 + metrics.progress_bar_size.1) as i16,
-        //                     10,
-        //                     PROGRESS_BAR_BACKGROUND_COLOUR,
-        //                 )
-        //                 .unwrap();
-
-        //             // draw progress bar foreground
-        //             canvas
-        //                 .rounded_box(
-        //                     metrics.progress_bar_pos.0 as i16 + 5,
-        //                     metrics.progress_bar_pos.1 as i16 + 5,
-        //                     metrics.progress_bar_pos.0 as i16
-        //                         + 5
-        //                         + ((metrics.progress_bar_size.0 - 10) as f32
-        //                             * progress_bar_fraction)
-        //                             .round() as i16,
-        //                     (metrics.progress_bar_pos.1 + metrics.progress_bar_size.1 - 5) as i16,
-        //                     10,
-        //                     PROGRESS_BAR_FOREGROUND_COLOUR,
-        //                 )
-        //                 .unwrap();
-        //         }
-        //     }
-        //     GamePhaseState::EndPage => canvas.string(100, 100, "Game over", Color::WHITE).unwrap(),
-        // }
+                    canvas.copy(&text_texture, None, rect).unwrap();
+                }
+            }
+        }
 
         canvas.present();
-        //::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
 }
 
@@ -1031,6 +902,8 @@ struct Metrics {
     answer_pos: (u32, u32),
     progress_bar_y: i32,
     progress_bar_height: u32,
+    left_score_tile_rect: Rect,
+    right_score_tile_rect: Rect,
     text_size: u16,
 }
 
@@ -1063,6 +936,12 @@ impl Metrics {
         let progress_bar_height = tile_height / 4;
         let progress_bar_y = (tile_ypos - progress_bar_height - tile_spacing) as i32;
 
+        let score_tile_width = tile_width * 2 / 3;
+        let score_tile_height = tile_height * 2 / 3;
+
+        let left_score_tile_rect = Rect::new(margin as i32, margin as i32, score_tile_width, score_tile_height);
+        let right_score_tile_rect = Rect::new((width - margin - score_tile_width) as i32, margin as i32, score_tile_width, score_tile_height);
+
         Metrics {
             width,
             height,
@@ -1071,10 +950,12 @@ impl Metrics {
             tile_x_stride: tile_width + tile_spacing,
             answer_size: (answer_width, answer_height),
             answer_pos: (margin, answer_ypos),
-            text_size,
             padding,
             progress_bar_y,
             progress_bar_height,
+            left_score_tile_rect,
+            right_score_tile_rect,
+            text_size,
         }
     }
 
