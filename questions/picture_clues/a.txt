@@ -1,0 +1,6 @@
+Picture clues
+    sequence: Cheese Eating Surrender Monkeys
+        picture: ./questions/picture_clues/a-cheese.jpg Cheese
+        picture: ./questions/picture_clues/a-eating.jpg Eating
+        picture: ./questions/picture_clues/a-white_flag.jpg Surrender
+        picture: ./questions/picture_clues/a-monkeys.jpg Monkeys

@@ -14,15 +14,10 @@ Easy Connections
         Grind
         Ollie
         Kickflip
-    connection: Things named after John Monash
-        A high school
-        A municipality
-        A university
-        A freeway
     connection: Taylor Swift number 1 Australian singles
-        Look What You Made Me Do
         Cardigan
         Bad Blood
+        Look What You Made Me Do
         Shake It Off
     connection: DoTA 2 Heroes
         Oracle

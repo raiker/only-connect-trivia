@@ -1,0 +1,26 @@
+Warm-up
+    connection: Root vegetables
+        Taro
+        Cassava
+        Turnip
+        Potato
+    connection: Things that won't cure COVID-19
+        Vitamins
+        Bleach
+        Chloroquine
+        Ivermectin
+    sequence: Colours of the rainbow
+        Red
+        Orange
+        Yellow
+        Green
+    sequence: Prime Ministers
+        Rudd
+        Abbott
+        Turnbull
+        Morrison
+    sequence: Kokomo - The Beach Boys
+        Aruba
+        Jamaica
+        Bermuda
+        Bahama

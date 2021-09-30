@@ -6,11 +6,21 @@ Hard Sequences
         4: US
     sequence: Stans by population
         Kazakhstan
-        Afghanistan
         Uzbekistan
+        Afghanistan
         Pakistan
     sequence: Men's marathon record holders
         Patrick Makau (Kenya)
         Wilson Kipsang (Kenya)
         Dennis Kimetto (Kenya)
         Eliud Kipchoge (Kenya)
+    sequence: 10, 9, 8, 7 on the Mohs hardness scale
+        Diamond
+        Corundum
+        Topaz
+        Quartz
+    sequence: People who have walked on the moon
+        Neil Armstrong
+        Buzz Aldrin
+        Pete Conrad
+        Alan Bean

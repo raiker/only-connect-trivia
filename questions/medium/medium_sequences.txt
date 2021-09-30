@@ -19,11 +19,6 @@ Medium Sequences
         Chris Evert
         Steffi Graf
         Serena Williams
-    sequence: Kokomo - The Beach Boys
-        Aruba
-        Jamaica
-        Bermuda
-        Bahama
     sequence: Android Versions
         Ice Cream Sandwich
         Jellybean

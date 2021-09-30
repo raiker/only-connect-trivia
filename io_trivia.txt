@@ -1,3 +1,5 @@
+# include_shuffle: ./questions/warmup.txt
+# include_shuffle: ./questions/picture_clues/a.txt
 include_shuffle: ./questions/easy/easy_connections.txt
 include_shuffle: ./questions/easy/easy_sequences.txt
 include_shuffle: ./questions/medium/medium_connections.txt

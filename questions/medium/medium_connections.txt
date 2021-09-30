@@ -54,3 +54,8 @@ Medium Connections
         Rutherford
         The sun
         Germany
+    connection: Things named after John Monash
+        A high school
+        A municipality
+        A university
+        A freeway

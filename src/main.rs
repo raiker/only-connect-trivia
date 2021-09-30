@@ -1,6 +1,6 @@
 #![feature(div_duration, generators, generator_trait)]
 use lazy_static::lazy_static;
-use questions::{Question, QuestionClues, QuestionSet, QuestionType};
+use questions::{Clue, Question, QuestionSet, QuestionType};
 use rand::Rng;
 use regex::Regex;
 use sdl2::event::Event;
@@ -274,9 +274,7 @@ impl QuestionPhase for SequencePhase {
             | SequencePhase::TwoCluesShown
             | SequencePhase::ThreeCluesShown
             | SequencePhase::PassedOver => true,
-            SequencePhase::CountIn | SequencePhase::AnswerShown => {
-                false
-            }
+            SequencePhase::CountIn | SequencePhase::AnswerShown => false,
         }
     }
 
@@ -334,7 +332,7 @@ enum QuestionState {
         title: String,
     },
     Question {
-        clues: QuestionClues,
+        clues: Vec<Clue>,
         connection: String,
         phase: Box<dyn QuestionPhase>,
         offered_to_red: bool, // question initially given to red team
@@ -690,7 +688,7 @@ pub fn main() {
 
                     let override_question_mark = (i == 3) && phase.is_clue_4_question_mark();
 
-                    let clue_texture = match (override_question_mark, clues) {
+                    match (override_question_mark, &clues[i]) {
                         (true, _) => {
                             let text_surface = render_text(
                                 "?",
@@ -702,13 +700,15 @@ pub fn main() {
                             )
                             .unwrap();
 
-                            texture_creator
+                            let clue_texture = texture_creator
                                 .create_texture_from_surface(text_surface)
-                                .unwrap()
+                                .unwrap();
+
+                            canvas.copy(&clue_texture, None, dst_rect).unwrap();
                         }
-                        (false, QuestionClues::TextClues(clues)) => {
+                        (false, Clue::TextClue(clue)) => {
                             let text_surface = render_text(
-                                &clues[i],
+                                &clue,
                                 &font,
                                 metrics.tile_size.0,
                                 metrics.tile_size.1,
@@ -717,12 +717,22 @@ pub fn main() {
                             )
                             .unwrap();
 
-                            texture_creator
+                            let clue_texture = texture_creator
                                 .create_texture_from_surface(text_surface)
-                                .unwrap()
+                                .unwrap();
+
+                            canvas.copy(&clue_texture, None, dst_rect).unwrap();
+                        }
+                        (false, Clue::PictureClue(image, _clue)) => {
+                            let clue_texture = texture_creator
+                            .create_texture_from_surface(image)
+                            .unwrap();
+
+                            let scaled_dst_rect = metrics.get_scaled_tile_dest_rect(i, image.size());
+                            canvas.copy(&clue_texture, None, scaled_dst_rect).unwrap();
                         }
                     };
-                    canvas.copy(&clue_texture, None, dst_rect).unwrap();
+
                 }
                 if phase.is_answer_shown() {
                     let dst_rect = metrics.get_answer_dest_rect();
@@ -1001,6 +1011,31 @@ impl Metrics {
         let width = self.tile_size.0;
         let height = self.tile_size.1;
         Rect::new(x, y, width, height)
+    }
+
+    fn get_scaled_tile_dest_rect(&self, index: usize, image_dimensions: (u32, u32)) -> Rect {
+        // compute scaled size maintaining aspect ratio
+        let pillarboxed_width = (image_dimensions.0 as f32 * self.tile_size.1 as f32
+            / image_dimensions.1 as f32)
+            .round() as u32;
+        let letterboxed_height = (image_dimensions.1 as f32 * self.tile_size.0 as f32
+            / image_dimensions.0 as f32)
+            .round() as u32;
+
+        let scaled_dimensions = if pillarboxed_width > self.tile_size.0 {
+            // too wide to pillarbox, use letterbox
+            (self.tile_size.0, letterboxed_height)
+        } else {
+            // use pillarbox
+            (pillarboxed_width, self.tile_size.1)
+        };
+
+        let x = (self.tile_0_pos.0
+            + self.tile_x_stride * index as u32
+            + (self.tile_size.0 - scaled_dimensions.0) / 2) as i32;
+        let y = (self.tile_0_pos.1 + (self.tile_size.1 - scaled_dimensions.1) / 2) as i32;
+
+        Rect::new(x, y, scaled_dimensions.0, scaled_dimensions.1)
     }
 
     fn get_answer_dest_rect(&self) -> Rect {

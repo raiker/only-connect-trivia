@@ -2,7 +2,15 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::{io::BufReader, path::Path};
 
+use lazy_static::lazy_static;
 use rand::prelude::*;
+use regex::Regex;
+use sdl2::image::LoadSurface;
+use sdl2::surface::Surface;
+
+lazy_static! {
+    static ref PICTURE_CLUE_REGEX: Regex = Regex::new(r"^        picture: (\S+) (\S.+)$").unwrap();
+}
 
 pub struct QuestionSet {
     pub title: String,
@@ -13,7 +21,7 @@ pub struct QuestionSet {
 pub struct Question {
     pub question_type: QuestionType,
     pub connection: String,
-    pub clues: QuestionClues,
+    pub clues: Vec<Clue>,
 }
 
 #[derive(Debug)]
@@ -22,11 +30,19 @@ pub enum QuestionType {
     Connection,
 }
 
-#[derive(Debug)]
-pub enum QuestionClues {
-    TextClues(Vec<String>),
-    // PictureClues(Vec<(Surface, String)>),
+pub enum Clue {
+    TextClue(String),
+    PictureClue(Surface<'static>, String),
     // MusicClues([;4]),
+}
+
+impl std::fmt::Debug for Clue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TextClue(clue) => f.debug_tuple("TextClue").field(clue).finish(),
+            Self::PictureClue(_surface, clue) => f.debug_tuple("PictureClue").field(clue).finish(),
+        }
+    }
 }
 
 pub fn load_question_sets<P: AsRef<Path>>(path: P) -> Result<Vec<QuestionSet>, Vec<String>> {
@@ -73,7 +89,7 @@ pub fn load_questions<P: AsRef<Path>>(path: P) -> Result<QuestionSet, Vec<String
     let mut questions = Vec::new();
     let mut errors = Vec::new();
 
-    let mut current_question: Option<(QuestionType, String, Vec<String>)> = None;
+    let mut current_question: Option<(QuestionType, String, Vec<Clue>)> = None;
 
     let file = match std::fs::File::open(path) {
         Ok(f) => f,
@@ -85,7 +101,7 @@ pub fn load_questions<P: AsRef<Path>>(path: P) -> Result<QuestionSet, Vec<String
 
     let bufreader = BufReader::new(file);
 
-    let replace_question = |current_question: &mut Option<(QuestionType, String, Vec<String>)>,
+    let replace_question = |current_question: &mut Option<(QuestionType, String, Vec<Clue>)>,
                             new_question,
                             questions: &mut Vec<Question>,
                             errors: &mut Vec<String>| {
@@ -94,7 +110,7 @@ pub fn load_questions<P: AsRef<Path>>(path: P) -> Result<QuestionSet, Vec<String
                 questions.push(Question {
                     question_type,
                     connection,
-                    clues: QuestionClues::TextClues(clues),
+                    clues,
                 });
             } else {
                 errors.push(format!(
@@ -135,9 +151,26 @@ pub fn load_questions<P: AsRef<Path>>(path: P) -> Result<QuestionSet, Vec<String
                         &mut questions,
                         &mut errors,
                     );
+                } else if let Some(captures) = PICTURE_CLUE_REGEX.captures(&l) {
+                    let picture_path = captures.get(1).unwrap();
+                    let text_clue = captures.get(2).unwrap();
+
+                    // attempt to load the picture
+                    if let Ok(image) = Surface::from_file(picture_path.as_str()) {
+                        if let Some((_, _, ref mut clues)) = current_question {
+                            clues.push(Clue::PictureClue(image, text_clue.as_str().into()));
+                        } else {
+                            errors.push(format!(
+                                "Clue {} doesn't belong to a question",
+                                text_clue.as_str()
+                            ));
+                        }
+                    } else {
+                        errors.push(format!("Could not load image {}", picture_path.as_str()));
+                    }
                 } else if let Some(p) = l.strip_prefix("        ") {
                     if let Some((_, _, ref mut clues)) = current_question {
-                        clues.push(p.into());
+                        clues.push(Clue::TextClue(p.into()));
                     } else {
                         errors.push(format!("Clue {} doesn't belong to a question", p));
                     }
